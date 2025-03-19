@@ -5,6 +5,7 @@ import json
 import re
 import httpx
 import logging
+import secrets
 
 # Set up logging configuration
 logging.basicConfig(
@@ -322,26 +323,32 @@ if pds_metadata:
     else:
         logging.error("Failed to extract authorization server from metadata")
 
+
 # 7) get the metadata of the authorization server
 def generate_oauth_state():
     """
     Generate a secure random state value for OAuth requests.
-    
+
     The state value is a random string that is:
     - Unpredictable and unique for each authorization request
     - At least 32 bytes (converted to a hex string)
     - Used as a CSRF protection mechanism
-    
+
     Returns:
         A secure random string to use as the state parameter
     """
-    import secrets
-    
+
     # Generate 32 bytes of random data and convert to hex
     # This will result in a 64-character hex string
     state = secrets.token_hex(32)
     logging.info(f"Generated OAuth state parameter ({len(state)} characters)")
     return state
+
+
+# AI! please creqte a function that will create a code_verifier for a PAR request. please implement it as follows:
+# The code_verifier is a cryptographically random string between 43 and 128 characters in length
+# It should only contain unreserved URL characters: A-Z, a-z, 0-9, hyphen (-), period (.), underscore (_), and tilde (~)
+# It's used as part of the PKCE (Proof Key for Code Exchange) extension for OAuth
 
 if auth_servers:
     auth_metadata, auth_endpoint, token_endpoint, par_endpoint = (
@@ -354,11 +361,11 @@ if auth_servers:
         print(f"  Authorization: {auth_endpoint}")
         print(f"  Token: {token_endpoint}")
         print(f"  PAR: {par_endpoint or 'Not available'}")
-        
+
         # Generate a state parameter for OAuth request
         oauth_state = generate_oauth_state()
         print(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
-        
+
         # In a real application, you would store this state value
         # to validate it when receiving the authorization response
     else:
