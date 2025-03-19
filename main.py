@@ -58,17 +58,17 @@ def resolve_identity(username: str):
     if re.match(HANDLE_REGEX, username):
         # Handle the case where username is a handle
         logging.debug(f"Username is a handle: {username}")
-        
+
         # Extract domain and TLD from the handle
-        parts = username.split('.')
+        parts = username.split(".")
         if len(parts) >= 2:
-            domain_tld = '.'.join(parts[1:])
+            domain_tld = ".".join(parts[1:])
             logging.info(f"Extracted domain and TLD: {domain_tld}")
         else:
             logging.warning(f"Could not extract domain from handle: {username}")
-            domain_tld = None
-            
-        url = f"https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle={username}"
+            return None
+
+        url = f"https://{domain_tld}/xrpc/com.atproto.identity.resolveHandle?handle={username}"
 
         # Make HTTP request to resolve handle to DID
         try:
@@ -97,12 +97,6 @@ def resolve_identity(username: str):
         except json.JSONDecodeError:
             logging.info("Failed to parse JSON response from handle resolution")
             return None
-
-    elif re.match(DID_RE, username):
-        # Handle the case where username is already a DID
-        logging.info(f"Username is a DID: {username}")
-        return username
-
     return None
 
 
@@ -110,8 +104,7 @@ def resolve_identity(username: str):
 
 # Login can start with a handle, DID, or auth server URL. We are calling
 # whatever the user supplied the "username".
-username = "spacetimedonuts.bsky.social"
-username = "statb.statmeet.com"
+username = "blah.bsky.social"
 
 # 2) retrieve the users DID
 user_did = resolve_identity(username)
@@ -119,6 +112,9 @@ if user_did:
     logging.info(f"Resolved username {username} to DID: {user_did}")
 else:
     logging.info(f"Failed to resolve username {username} to a DID")
+
+# 3) retrieve the user DID document
+
 
 #     pds_url = pds_endpoint(did_doc)
 #     print(f"account PDS: {pds_url}")
