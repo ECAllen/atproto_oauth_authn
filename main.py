@@ -206,6 +206,78 @@ def extract_auth_server(metadata):
     return auth_servers
 
 
+def get_auth_server_metadata(auth_servers):
+    """
+    Retrieve the OAuth authorization server metadata from the first available server.
+
+    Args:
+        auth_servers: List of authorization server URLs
+
+    Returns:
+        A tuple containing (metadata, auth_endpoint, token_endpoint, par_endpoint)
+        All values will be None if no server is available
+    """
+    if not auth_servers or not isinstance(auth_servers, list):
+        logging.error(
+            "Cannot get auth server metadata: No authorization servers provided"
+        )
+        return None, None, None, None
+
+    for auth_server in auth_servers:
+        metadata_url = (
+            f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
+        )
+        logging.info(f"Trying to fetch auth server metadata from: {metadata_url}")
+
+        try:
+            response = httpx.get(metadata_url)
+            response.raise_for_status()
+
+            metadata = response.json()
+            logging.info(
+                f"Successfully retrieved auth server metadata from {auth_server}"
+            )
+
+            # Extract endpoints from metadata
+            auth_endpoint = metadata.get("authorization_endpoint")
+            token_endpoint = metadata.get("token_endpoint")
+            par_endpoint = metadata.get("pushed_authorization_request_endpoint")
+
+            if auth_endpoint and token_endpoint:
+                logging.info(f"Found authorization endpoint: {auth_endpoint}")
+                logging.info(f"Found token endpoint: {token_endpoint}")
+                if par_endpoint:
+                    logging.info(f"Found PAR endpoint: {par_endpoint}")
+                else:
+                    logging.warning("PAR endpoint not found in auth server metadata")
+
+                return metadata, auth_endpoint, token_endpoint, par_endpoint
+            else:
+                logging.warning(
+                    f"Missing required endpoints in auth server metadata from {auth_server}"
+                )
+                continue
+
+        except httpx.HTTPStatusError as e:
+            logging.warning(
+                f"HTTP error occurred while retrieving auth server metadata from {auth_server}: {e}"
+            )
+            continue
+        except httpx.RequestError as e:
+            logging.warning(
+                f"Request error occurred while retrieving auth server metadata from {auth_server}: {e}"
+            )
+            continue
+        except json.JSONDecodeError:
+            logging.warning(
+                f"Failed to parse JSON response from auth server metadata retrieval from {auth_server}"
+            )
+            continue
+
+    logging.error("Failed to retrieve metadata from any authorization server")
+    return None, None, None, None
+
+
 # 1) get users handle
 
 # Login can start with a handle, DID, or auth server URL. We are calling
@@ -229,7 +301,6 @@ if user_did:
         logging.info(f"Successfully retrieved DID document for {user_did}")
     else:
         logging.error(f"Failed to retrieve DID document for {user_did}")
-    print(did_document)
 
 
 # 5) get the PDS server metadata from the well-known endpoint
@@ -252,67 +323,17 @@ if pds_metadata:
         logging.error("Failed to extract authorization server from metadata")
 
 # 7) get the metadata of the authorization server
-def get_auth_server_metadata(auth_servers):
-    """
-    Retrieve the OAuth authorization server metadata from the first available server.
-    
-    Args:
-        auth_servers: List of authorization server URLs
-        
-    Returns:
-        A tuple containing (metadata, auth_endpoint, token_endpoint, par_endpoint)
-        All values will be None if no server is available
-    """
-    if not auth_servers or not isinstance(auth_servers, list):
-        logging.error("Cannot get auth server metadata: No authorization servers provided")
-        return None, None, None, None
-    
-    for auth_server in auth_servers:
-        metadata_url = f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
-        logging.info(f"Trying to fetch auth server metadata from: {metadata_url}")
-        
-        try:
-            response = httpx.get(metadata_url)
-            response.raise_for_status()
-            
-            metadata = response.json()
-            logging.info(f"Successfully retrieved auth server metadata from {auth_server}")
-            
-            # Extract endpoints from metadata
-            auth_endpoint = metadata.get("authorization_endpoint")
-            token_endpoint = metadata.get("token_endpoint")
-            par_endpoint = metadata.get("pushed_authorization_request_endpoint")
-            
-            if auth_endpoint and token_endpoint:
-                logging.info(f"Found authorization endpoint: {auth_endpoint}")
-                logging.info(f"Found token endpoint: {token_endpoint}")
-                if par_endpoint:
-                    logging.info(f"Found PAR endpoint: {par_endpoint}")
-                else:
-                    logging.warning("PAR endpoint not found in auth server metadata")
-                
-                return metadata, auth_endpoint, token_endpoint, par_endpoint
-            else:
-                logging.warning(f"Missing required endpoints in auth server metadata from {auth_server}")
-                continue
-                
-        except httpx.HTTPStatusError as e:
-            logging.warning(f"HTTP error occurred while retrieving auth server metadata from {auth_server}: {e}")
-            continue
-        except httpx.RequestError as e:
-            logging.warning(f"Request error occurred while retrieving auth server metadata from {auth_server}: {e}")
-            continue
-        except json.JSONDecodeError:
-            logging.warning(f"Failed to parse JSON response from auth server metadata retrieval from {auth_server}")
-            continue
-    
-    logging.error("Failed to retrieve metadata from any authorization server")
-    return None, None, None, None
+# AI! please create a function that will create a state value for a oauth PAR request, the state vaule needs to have the following properties:# If we have authorization servers, get the metadata from the first available one
+# The state parameter should be a random string that is unpredictable and unique for each authorization request
+# It should be at least 32 bytes (converted to a hex or base64 string)
+# It serves as a CSRF (Cross-Site Request Forgery) protection mechanism
+# The client application must store this value and validate it when receiving the authorization response
 
-# If we have authorization servers, get the metadata from the first available one
 if auth_servers:
-    auth_metadata, auth_endpoint, token_endpoint, par_endpoint = get_auth_server_metadata(auth_servers)
-    
+    auth_metadata, auth_endpoint, token_endpoint, par_endpoint = (
+        get_auth_server_metadata(auth_servers)
+    )
+
     if auth_metadata:
         logging.info("Auth server metadata retrieved successfully")
         print("Auth Server Endpoints:")
@@ -321,4 +342,3 @@ if auth_servers:
         print(f"  PAR: {par_endpoint or 'Not available'}")
     else:
         logging.error("Failed to retrieve auth server metadata from any server")
-
