@@ -113,37 +113,39 @@ if user_did:
 else:
     logging.info(f"Failed to resolve username {username} to a DID")
 
+
 # 3) retrieve the user DID document
 def get_did_document(did):
     """
     Retrieve the DID document for a given DID.
-    
+
     Args:
         did: The DID to retrieve the document for
-        
+
     Returns:
         The DID document as a dictionary if successful, None otherwise
     """
     url = f"https://plc.directory/{did}"
-    
+
     try:
         # Make HTTP request to retrieve the DID document
         response = httpx.get(url)
         response.raise_for_status()
-        
+
         # Parse the JSON response
         did_document = response.json()
         logging.info(f"Retrieved DID document for {did}")
-        
+
         # Extract the PDS URL from the DID document
-        if 'service' in did_document and len(did_document['service']) > 0:
-            pds_url = did_document['service'][0].get('serviceEndpoint')
+        if "service" in did_document and len(did_document["service"]) > 0:
+            pds_url = did_document["service"][0].get("serviceEndpoint")
             if pds_url:
                 logging.info(f"User's PDS URL: {pds_url}")
                 return did_document, pds_url
-        
+
         logging.warning(f"Could not find PDS URL in DID document for {did}")
         return did_document, None
+    # AI! please handle 404 "DID not found"
     except httpx.HTTPStatusError as e:
         logging.error(f"HTTP error occurred while retrieving DID document: {e}")
         return None, None
@@ -153,6 +155,7 @@ def get_did_document(did):
     except json.JSONDecodeError:
         logging.error(f"Failed to parse JSON response from DID document retrieval")
         return None, None
+
 
 # If we have a user DID, retrieve the DID document
 if user_did:
