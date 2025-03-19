@@ -100,21 +100,6 @@ def resolve_identity(username: str):
     return None
 
 
-# 1) get users handle
-
-# Login can start with a handle, DID, or auth server URL. We are calling
-# whatever the user supplied the "username".
-username = "blah.bsky.social"
-
-# 2) retrieve the users DID
-user_did = resolve_identity(username)
-if user_did:
-    logging.info(f"Resolved username {username} to DID: {user_did}")
-else:
-    logging.info(f"Failed to resolve username {username} to a DID")
-
-
-# 3) retrieve the user DID document
 def get_did_document(did):
     """
     Retrieve the DID document for a given DID.
@@ -159,32 +144,37 @@ def get_did_document(did):
         logging.error(f"Request error occurred while retrieving DID document: {e}")
         return None, None
     except json.JSONDecodeError:
-        logging.error(f"Failed to parse JSON response from DID document retrieval")
+        logging.error("Failed to parse JSON response from DID document retrieval")
         return None, None
 
 
+# 1) get users handle
+
+# Login can start with a handle, DID, or auth server URL. We are calling
+# whatever the user supplied the "username".
+username = "spacetimedonuts.bsky.social"
+
+# 2) retrieve the users DID
+user_did = resolve_identity(username)
+if user_did:
+    logging.info(f"Resolved username {username} to DID: {user_did}")
+else:
+    logging.info(f"Failed to resolve username {username} to a DID")
+
+
+# 3) retrieve the user DID document
 # If we have a user DID, retrieve the DID document
 if user_did:
     did_document, pds_url = get_did_document(user_did)
     if did_document:
-        logging.info(f"Successfully retrieved DID document")
+        logging.info(f"Successfully retrieved DID document for {user_did}")
     else:
         logging.error(f"Failed to retrieve DID document for {user_did}")
+    print(did_document)
 
+# 4) get the URL of the PDS server from the DID doc
 
-#     pds_url = pds_endpoint(did_doc)
-#     print(f"account PDS: {pds_url}")
-#     authserver_url = resolve_pds_authserver(pds_url)
-# elif username.startswith("https://") and is_safe_url(username):
-#     # When starting with an auth server, we don't know about the account yet.
-#     did, handle, pds_url = None, None, None
-#     login_hint = None
-#     # Check if this is a Resource Server (PDS) URL; otherwise assume it is authorization server
-#     initial_url = username
-#     try:
-#         authserver_url = resolve_pds_authserver(initial_url)
-#     except Exception:
-#         authserver_url = initial_url
-# else:
-#     flash("Not a valid handle, DID, or auth server URL")
-#     return render_template("login.html"), 400
+print(pds_url)
+
+# 5) get the PDS server metadata, example:  <https://velvetfoot.us-east.host.bsky.network/.well-known/oauth-protected-resource>.
+# AI! please GET the metadata from the PDS server using the pds_url and /.well-known/oauth-protected-resource
