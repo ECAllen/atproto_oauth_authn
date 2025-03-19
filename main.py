@@ -378,12 +378,31 @@ def generate_code_verifier(length=128):
     return code_verifier
 
 
-# AI! please create a function to generate a code_challenge from the code_verifier
-# Take the code_verifier string
-# Apply the SHA-256 hash function to it
-# Base64URL-encode the resulting hash value
-# In pseudocode:
-# Copycode_challenge = BASE64URL-ENCODE(SHA256(ASCII(code_verifier)))
+def generate_code_challenge(code_verifier):
+    """
+    Generate a code_challenge from a code_verifier for PKCE in OAuth.
+    
+    The code_challenge is:
+    - The SHA-256 hash of the code_verifier
+    - Base64URL-encoded
+    
+    Args:
+        code_verifier: The code_verifier string
+        
+    Returns:
+        The code_challenge string
+    """
+    import hashlib
+    
+    # Apply SHA-256 hash to the code_verifier
+    code_verifier_bytes = code_verifier.encode('ascii')
+    hash_bytes = hashlib.sha256(code_verifier_bytes).digest()
+    
+    # Base64URL-encode the hash
+    code_challenge = base64.urlsafe_b64encode(hash_bytes).decode('utf-8').rstrip('=')
+    
+    logging.info(f"Generated code_challenge ({len(code_challenge)} characters)")
+    return code_challenge
 
 if auth_servers:
     auth_metadata, auth_endpoint, token_endpoint, par_endpoint = (
@@ -404,6 +423,10 @@ if auth_servers:
         # Generate a code_verifier for PKCE
         code_verifier = generate_code_verifier()
         print(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
+        
+        # Generate a code_challenge from the code_verifier
+        code_challenge = generate_code_challenge(code_verifier)
+        print(f"Generated code_challenge: {code_challenge[:10]}... (truncated)")
 
         # In a real application, you would store these values
         # to use them when exchanging the authorization code for tokens
