@@ -58,6 +58,7 @@ def resolve_identity(username: str):
     if re.match(HANDLE_REGEX, username):
         # Handle the case where username is a handle
         logging.debug(f"Username is a handle: {username}")
+        # AI! the handle is in the form user.domain.tld please extract the domain and tld from the username
         url = f"https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle={username}"
 
         # Make HTTP request to resolve handle to DID
@@ -101,7 +102,7 @@ def resolve_identity(username: str):
 # Login can start with a handle, DID, or auth server URL. We are calling
 # whatever the user supplied the "username".
 username = "spacetimedonuts.bsky.social"
-# username = "statb.statmeet.com"
+username = "statb.statmeet.com"
 
 # 2) retrieve the users DID
 user_did = resolve_identity(username)
