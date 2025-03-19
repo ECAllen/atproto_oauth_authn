@@ -1,11 +1,11 @@
 from authlib.jose import JsonWebKey
 from dotenv import load_dotenv
-import os
 import json
 import re
 import httpx
 import logging
 import secrets
+import base64
 
 # Set up logging configuration
 logging.basicConfig(
@@ -345,39 +345,45 @@ def generate_oauth_state():
     return state
 
 
-def generate_code_verifier(length=96):
+def generate_code_verifier(length=128):
     """
     Generate a code_verifier for PKCE (Proof Key for Code Exchange) in OAuth.
-    
+
     The code_verifier is:
     - A cryptographically random string between 43 and 128 characters
-    - Contains only unreserved URL characters: A-Z, a-z, 0-9, hyphen (-), 
+    - Contains only unreserved URL characters: A-Z, a-z, 0-9, hyphen (-),
       period (.), underscore (_), and tilde (~)
-    
+
     Args:
-        length: Length of the code verifier (default: 96)
+        length: Length of the code verifier (default: 128)
                Must be between 43 and 128 characters
-    
+
     Returns:
         A secure random string to use as the code_verifier parameter
     """
     if length < 43 or length > 128:
         raise ValueError("Code verifier length must be between 43 and 128 characters")
-    
+
     # Generate random bytes and convert to base64
-    import base64
-    
     # Generate random bytes (3/4 of the desired length to account for base64 expansion)
     random_bytes = secrets.token_bytes(length * 3 // 4)
-    
+
     # Convert to base64 and remove padding
-    code_verifier = base64.urlsafe_b64encode(random_bytes).decode('utf-8').rstrip('=')
-    
+    code_verifier = base64.urlsafe_b64encode(random_bytes).decode("utf-8").rstrip("=")
+
     # Trim to desired length
     code_verifier = code_verifier[:length]
-    
+
     logging.info(f"Generated code_verifier ({len(code_verifier)} characters)")
     return code_verifier
+
+
+# AI! please create a function to generate a code_challenge from the code_verifier
+# Take the code_verifier string
+# Apply the SHA-256 hash function to it
+# Base64URL-encode the resulting hash value
+# In pseudocode:
+# Copycode_challenge = BASE64URL-ENCODE(SHA256(ASCII(code_verifier)))
 
 if auth_servers:
     auth_metadata, auth_endpoint, token_endpoint, par_endpoint = (
@@ -394,11 +400,11 @@ if auth_servers:
         # Generate a state parameter for OAuth request
         oauth_state = generate_oauth_state()
         print(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
-        
+
         # Generate a code_verifier for PKCE
         code_verifier = generate_code_verifier()
         print(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
-        
+
         # In a real application, you would store these values
         # to use them when exchanging the authorization code for tokens
     else:
