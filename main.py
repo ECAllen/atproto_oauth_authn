@@ -33,51 +33,65 @@ DID_RE = re.compile(
     r"(?<!:)$"  # Cannot end with colon
 )
 
+def resolve_identity(username: str):
+    """
+    Resolve a username (handle or DID) to a DID.
+    
+    Args:
+        username: A string that could be a handle or DID
+        
+    Returns:
+        The DID if resolution is successful, None otherwise
+    """
+    if re.match(HANDLE_REGEX, username):
+        # Handle the case where username is a handle
+        print(f"Username is a handle: {username}")
+        url = (
+            f"https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle={username}"
+        )
+        
+        # Make HTTP request to resolve handle to DID
+        try:
+            response = httpx.get(url)
+            response.raise_for_status()  # Raise exception for 4XX/5XX responses
+            
+            # Parse the JSON response
+            data = response.json()
+            
+            # Extract the DID from the response
+            did = data.get('did')
+            if did:
+                print(f"Resolved handle {username} to DID: {did}")
+                return did
+            else:
+                print(f"Failed to resolve handle: No DID found in response")
+                return None
+        except httpx.HTTPStatusError as e:
+            print(f"HTTP error occurred while resolving handle: {e}")
+            return None
+        except httpx.RequestError as e:
+            print(f"Request error occurred while resolving handle: {e}")
+            return None
+        except json.JSONDecodeError:
+            print(f"Failed to parse JSON response from handle resolution")
+            return None
+
+    elif re.match(DID_RE, username):
+        # Handle the case where username is already a DID
+        print(f"Username is a DID: {username}")
+        return username
+    
+    return None
+
+
 # 1) get users handle
 
 # Login can start with a handle, DID, or auth server URL. We are calling
 # whatever the user supplied the "username".
 username = "blah"
 
-
 # 2) retrieve the users DID
-
-if re.match(HANDLE_REGEX, username):
-    # Handle the case where username is a handle
-    print(f"Username is a handle: {username}")
-    url = (
-        f"https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle={username}"
-    )
-    
-    # Make HTTP request to resolve handle to DID
-    try:
-        response = httpx.get(url)
-        response.raise_for_status()  # Raise exception for 4XX/5XX responses
-        
-        # Parse the JSON response
-        data = response.json()
-        
-        # Extract the DID from the response
-        did = data.get('did')
-        if did:
-            print(f"Resolved handle {username} to DID: {did}")
-            return did
-        else:
-            print(f"Failed to resolve handle: No DID found in response")
-            return None
-    except httpx.HTTPStatusError as e:
-        print(f"HTTP error occurred while resolving handle: {e}")
-        return None
-    except httpx.RequestError as e:
-        print(f"Request error occurred while resolving handle: {e}")
-        return None
-    except json.JSONDecodeError:
-        print(f"Failed to parse JSON response from handle resolution")
-        return None
-
-elif re.match(DID_RE, username):
-    # Handle the case where username is already a DID
-    print(f"Username is a DID: {username}")
+user_did = resolve_identity(username)
 
     #     pds_url = pds_endpoint(did_doc)
     #     print(f"account PDS: {pds_url}")
