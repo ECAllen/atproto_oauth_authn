@@ -45,10 +45,35 @@ username = "blah"
 if re.match(HANDLE_REGEX, username):
     # Handle the case where username is a handle
     print(f"Username is a handle: {username}")
-    # AI! pleae use httpx to amake a request to the url and then get the did from the josn response
     url = (
         f"https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle={username}"
     )
+    
+    # Make HTTP request to resolve handle to DID
+    try:
+        response = httpx.get(url)
+        response.raise_for_status()  # Raise exception for 4XX/5XX responses
+        
+        # Parse the JSON response
+        data = response.json()
+        
+        # Extract the DID from the response
+        did = data.get('did')
+        if did:
+            print(f"Resolved handle {username} to DID: {did}")
+            return did
+        else:
+            print(f"Failed to resolve handle: No DID found in response")
+            return None
+    except httpx.HTTPStatusError as e:
+        print(f"HTTP error occurred while resolving handle: {e}")
+        return None
+    except httpx.RequestError as e:
+        print(f"Request error occurred while resolving handle: {e}")
+        return None
+    except json.JSONDecodeError:
+        print(f"Failed to parse JSON response from handle resolution")
+        return None
 
 elif re.match(DID_RE, username):
     # Handle the case where username is already a DID
