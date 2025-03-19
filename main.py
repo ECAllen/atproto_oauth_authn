@@ -114,6 +114,16 @@ else:
     logging.info(f"Failed to resolve username {username} to a DID")
 
 # 3) retrieve the user DID document
+    # AI! convert the below code to python, this is to retrieve the did document
+    let url = "https://plc.directory/" + USER_HANDLE;
+    fetch( url ).then( response => {
+        // Process the HTTP Response
+        return response.json();
+    }).then( data => {
+        // Process the HTTP Response Body
+        userDidDocument = data;
+        userPDSURL = userDidDocument.service[0].serviceEndpoint;
+    });
 
 
 #     pds_url = pds_endpoint(did_doc)
