@@ -279,52 +279,6 @@ def get_auth_server_metadata(auth_servers):
     return None, None, None, None
 
 
-# 1) get users handle
-
-# Login can start with a handle, DID, or auth server URL. We are calling
-# whatever the user supplied the "username".
-username = "spacetimedonuts.bsky.social"
-
-# 2) retrieve the users DID
-user_did = resolve_identity(username)
-if user_did:
-    logging.info(f"Resolved username {username} to DID: {user_did}")
-else:
-    logging.info(f"Failed to resolve username {username} to a DID")
-
-
-# 3) retrieve the user DID document
-# 4) get the URL of the PDS server from the DID doc
-# If we have a user DID, retrieve the DID document
-if user_did:
-    did_document, pds_url = get_did_document(user_did)
-    if did_document:
-        logging.info(f"Successfully retrieved DID document for {user_did}")
-    else:
-        logging.error(f"Failed to retrieve DID document for {user_did}")
-
-
-# 5) get the PDS server metadata from the well-known endpoint
-
-if pds_url:
-    pds_metadata = get_pds_metadata(pds_url)
-    if pds_metadata:
-        logging.info("PDS metadata retrieved successfully")
-    else:
-        logging.error("Failed to retrieve PDS metadata")
-
-
-# 6) from the metadata extract the authorization server
-# If we have PDS metadata, extract the authorization server
-if pds_metadata:
-    auth_servers = extract_auth_server(pds_metadata)
-    if auth_servers:
-        logging.info(f"Authorization server URL: {auth_servers[0]}")
-    else:
-        logging.error("Failed to extract authorization server from metadata")
-
-
-# 7) get the metadata of the authorization server
 def generate_oauth_state():
     """
     Generate a secure random state value for OAuth requests.
@@ -381,28 +335,76 @@ def generate_code_verifier(length=128):
 def generate_code_challenge(code_verifier):
     """
     Generate a code_challenge from a code_verifier for PKCE in OAuth.
-    
+
     The code_challenge is:
     - The SHA-256 hash of the code_verifier
     - Base64URL-encoded
-    
+
     Args:
         code_verifier: The code_verifier string
-        
+
     Returns:
         The code_challenge string
     """
     import hashlib
-    
+
     # Apply SHA-256 hash to the code_verifier
-    code_verifier_bytes = code_verifier.encode('ascii')
+    code_verifier_bytes = code_verifier.encode("ascii")
     hash_bytes = hashlib.sha256(code_verifier_bytes).digest()
-    
+
     # Base64URL-encode the hash
-    code_challenge = base64.urlsafe_b64encode(hash_bytes).decode('utf-8').rstrip('=')
-    
+    code_challenge = base64.urlsafe_b64encode(hash_bytes).decode("utf-8").rstrip("=")
+
     logging.info(f"Generated code_challenge ({len(code_challenge)} characters)")
     return code_challenge
+
+
+# 1) get users handle
+
+# Login can start with a handle, DID, or auth server URL. We are calling
+# whatever the user supplied the "username".
+username = "spacetimedonuts.bsky.social"
+
+# 2) retrieve the users DID
+user_did = resolve_identity(username)
+if user_did:
+    logging.info(f"Resolved username {username} to DID: {user_did}")
+else:
+    logging.info(f"Failed to resolve username {username} to a DID")
+
+
+# 3) retrieve the user DID document
+# 4) get the URL of the PDS server from the DID doc
+# If we have a user DID, retrieve the DID document
+if user_did:
+    did_document, pds_url = get_did_document(user_did)
+    if did_document:
+        logging.info(f"Successfully retrieved DID document for {user_did}")
+    else:
+        logging.error(f"Failed to retrieve DID document for {user_did}")
+
+
+# 5) get the PDS server metadata from the well-known endpoint
+
+if pds_url:
+    pds_metadata = get_pds_metadata(pds_url)
+    if pds_metadata:
+        logging.info("PDS metadata retrieved successfully")
+    else:
+        logging.error("Failed to retrieve PDS metadata")
+
+
+# 6) from the metadata extract the authorization server
+# If we have PDS metadata, extract the authorization server
+if pds_metadata:
+    auth_servers = extract_auth_server(pds_metadata)
+    if auth_servers:
+        logging.info(f"Authorization server URL: {auth_servers[0]}")
+    else:
+        logging.error("Failed to extract authorization server from metadata")
+
+
+# 7) get the metadata of the authorization server
 
 if auth_servers:
     auth_metadata, auth_endpoint, token_endpoint, par_endpoint = (
@@ -423,7 +425,7 @@ if auth_servers:
         # Generate a code_verifier for PKCE
         code_verifier = generate_code_verifier()
         print(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
-        
+
         # Generate a code_challenge from the code_verifier
         code_challenge = generate_code_challenge(code_verifier)
         print(f"Generated code_challenge: {code_challenge[:10]}... (truncated)")
@@ -432,3 +434,8 @@ if auth_servers:
         # to use them when exchanging the authorization code for tokens
     else:
         logging.error("Failed to retrieve auth server metadata from any server")
+
+# AI! please create a function to do the following:
+# prepare a POST request against the URL indicated in the par_endpoint key  with these
+# content-type: application/x-www-form-urlencoded, and this "body":
+# response_type=code&code_challenge_method=S256&scope=atproto+transition%3Ageneric&client_id=https%3A%2F%2Fmadrilenyer.neocities.org%2Fbsky%2Foauth%2Fclient-metadata.json&redirect_uri=https%3A%2F%2Fmadrilenyer.neocities.org%2Fbsky%2Foauth%2Fcallback%2F&code_challenge=URQ-2arwHpJzNwcFPng-_IE3gRGGBN0SVoFMN7wEiWI&state=2e94cf77e8b0ba2209dc6dcb90018c8d044ac31cb526fc4823278585&login_hint=madrilenyer.bsky.social
