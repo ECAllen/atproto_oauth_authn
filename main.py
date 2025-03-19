@@ -176,5 +176,47 @@ if user_did:
 
 print(pds_url)
 
-# 5) get the PDS server metadata, example:  <https://velvetfoot.us-east.host.bsky.network/.well-known/oauth-protected-resource>.
-# AI! please GET the metadata from the PDS server using the pds_url and /.well-known/oauth-protected-resource
+# 5) get the PDS server metadata from the well-known endpoint
+def get_pds_metadata(pds_url):
+    """
+    Retrieve the OAuth protected resource metadata from the PDS server.
+    
+    Args:
+        pds_url: The URL of the PDS server
+        
+    Returns:
+        The metadata as a dictionary if successful, None otherwise
+    """
+    if not pds_url:
+        logging.error("Cannot get PDS metadata: PDS URL is None")
+        return None
+        
+    metadata_url = f"{pds_url.rstrip('/')}/.well-known/oauth-protected-resource"
+    logging.info(f"Fetching PDS metadata from: {metadata_url}")
+    
+    try:
+        response = httpx.get(metadata_url)
+        response.raise_for_status()
+        
+        metadata = response.json()
+        logging.info(f"Successfully retrieved PDS metadata")
+        return metadata
+    except httpx.HTTPStatusError as e:
+        logging.error(f"HTTP error occurred while retrieving PDS metadata: {e}")
+        return None
+    except httpx.RequestError as e:
+        logging.error(f"Request error occurred while retrieving PDS metadata: {e}")
+        return None
+    except json.JSONDecodeError:
+        logging.error("Failed to parse JSON response from PDS metadata retrieval")
+        return None
+
+# If we have a PDS URL, retrieve the metadata
+if pds_url:
+    pds_metadata = get_pds_metadata(pds_url)
+    if pds_metadata:
+        logging.info("PDS metadata retrieved successfully")
+        print("PDS Metadata:")
+        print(json.dumps(pds_metadata, indent=2))
+    else:
+        logging.error("Failed to retrieve PDS metadata")
