@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import os
 import json
 import re
+import httpx
 
 load_dotenv()
 
@@ -38,21 +39,20 @@ DID_RE = re.compile(
 # whatever the user supplied the "username".
 username = "blah"
 
-def resolve_identity(username: str):
-    # 2) retrieve the users DID
-    if re.match(HANDLE_REGEX, username) or re.match(DID_RE, username):
-        # Check if the username is a handle
-        is_handle = re.match(HANDLE_REGEX, username) is not None
-        is_did = re.match(DID_RE, username) is not None
-        
-        if is_handle:
-            # Handle the case where username is a handle
-            print(f"Username is a handle: {username}")
-            # Here you would typically resolve the handle to a DID
-        elif is_did:
-            # Handle the case where username is already a DID
-            print(f"Username is a DID: {username}")
-        
+
+# 2) retrieve the users DID
+
+if re.match(HANDLE_REGEX, username):
+    # Handle the case where username is a handle
+    print(f"Username is a handle: {username}")
+    # AI! pleae use httpx to amake a request to the url and then get the did from the josn response
+    url = (
+        f"https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle={username}"
+    )
+
+elif re.match(DID_RE, username):
+    # Handle the case where username is already a DID
+    print(f"Username is a DID: {username}")
 
     #     pds_url = pds_endpoint(did_doc)
     #     print(f"account PDS: {pds_url}")
