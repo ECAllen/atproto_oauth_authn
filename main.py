@@ -183,6 +183,29 @@ def get_pds_metadata(pds_url):
         return None
 
 
+def extract_auth_server(metadata):
+    """
+    Extract the authorization server URL from the PDS metadata.
+
+    Args:
+        metadata: The PDS metadata dictionary
+
+    Returns:
+        The authorization server URL if found, None otherwise
+    """
+    if not metadata:
+        logging.error("Cannot extract authorization server: Metadata is None")
+        return None
+
+    auth_servers = metadata.get("authorization_servers")
+    if not auth_servers or not isinstance(auth_servers, list) or len(auth_servers) == 0:
+        logging.error("No authorization servers found in metadata")
+        return None
+
+    # Use the first authorization server in the list
+    return auth_servers
+
+
 # 1) get users handle
 
 # Login can start with a handle, DID, or auth server URL. We are calling
@@ -198,6 +221,7 @@ else:
 
 
 # 3) retrieve the user DID document
+# 4) get the URL of the PDS server from the DID doc
 # If we have a user DID, retrieve the DID document
 if user_did:
     did_document, pds_url = get_did_document(user_did)
@@ -207,9 +231,6 @@ if user_did:
         logging.error(f"Failed to retrieve DID document for {user_did}")
     print(did_document)
 
-# 4) get the URL of the PDS server from the DID doc
-
-print(pds_url)
 
 # 5) get the PDS server metadata from the well-known endpoint
 
@@ -217,41 +238,36 @@ if pds_url:
     pds_metadata = get_pds_metadata(pds_url)
     if pds_metadata:
         logging.info("PDS metadata retrieved successfully")
-        print("PDS Metadata:")
-        print(json.dumps(pds_metadata, indent=2))
     else:
         logging.error("Failed to retrieve PDS metadata")
 
-# 6) from the metadata extract the authorization server
-def extract_auth_server(metadata):
-    """
-    Extract the authorization server URL from the PDS metadata.
-    
-    Args:
-        metadata: The PDS metadata dictionary
-        
-    Returns:
-        The authorization server URL if found, None otherwise
-    """
-    if not metadata:
-        logging.error("Cannot extract authorization server: Metadata is None")
-        return None
-        
-    auth_servers = metadata.get("authorization_servers")
-    if not auth_servers or not isinstance(auth_servers, list) or len(auth_servers) == 0:
-        logging.error("No authorization servers found in metadata")
-        return None
-        
-    # Use the first authorization server in the list
-    auth_server = auth_servers[0]
-    logging.info(f"Found authorization server: {auth_server}")
-    return auth_server
 
+# 6) from the metadata extract the authorization server
 # If we have PDS metadata, extract the authorization server
 if pds_metadata:
-    auth_server = extract_auth_server(pds_metadata)
-    if auth_server:
-        logging.info(f"Authorization server URL: {auth_server}")
-        print(f"Authorization Server: {auth_server}")
+    auth_servers = extract_auth_server(pds_metadata)
+    if auth_servers:
+        logging.info(f"Authorization server URL: {auth_servers[0]}")
     else:
         logging.error("Failed to extract authorization server from metadata")
+
+# 7) get the metadata of the authorization server
+    # AI! please go through the list of authoraiztion servers, and get the metadata of the first one availbale, only get metaddata from the first available server, if the first one is not available, then get the metadata of the second one, and so on
+    # please use the below javascript as a guide on what to extract, please replace the below javascript with python code
+    let userAuthServerDiscovery = null;
+    let userAuthorizationEndPoint = null;
+    let userTokenEndPoint = null;
+    let userPAREndPoint = null;
+
+    let url = userAuthServerURL + "/.well-known/oauth-authorization-server";
+    fetch( url ).then( response => {
+        // Process the HTTP Response
+        return response.json();
+    }).then( data => {
+        // Process the HTTP Response Body
+        userAuthServerDiscovery   = data;
+        userAuthorizationEndPoint = userAuthServerDiscovery.authorization_endpoint;
+        userTokenEndPoint         = userAuthServerDiscovery.token_endpoint;
+        userPAREndPoint           = userAuthServerDiscovery.pushed_authorization_request_endpoint;
+    });
+
