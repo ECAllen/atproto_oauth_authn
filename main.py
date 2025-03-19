@@ -39,22 +39,20 @@ DID_RE = re.compile(
 username = "blah"
 
 def resolve_identity(username: str):
-
-# 2) retrieve the users DID
-if re.match(HANDLE_REGEX, username) or re.match(DID_REGEX, username):
-
-    # Check if the username is a handle
-    is_handle = re.match(HANDLE_REGEX, username) is not None
-    is_did = re.match(DID_REGEX, username) is not None
-    
-    if is_handle:
-        # Handle the case where username is a handle
-        print(f"Username is a handle: {username}")
-        # Here you would typically resolve the handle to a DID
-    elif is_did:
-        # Handle the case where username is already a DID
-        print(f"Username is a DID: {username}")
-    
+    # 2) retrieve the users DID
+    if re.match(HANDLE_REGEX, username) or re.match(DID_RE, username):
+        # Check if the username is a handle
+        is_handle = re.match(HANDLE_REGEX, username) is not None
+        is_did = re.match(DID_RE, username) is not None
+        
+        if is_handle:
+            # Handle the case where username is a handle
+            print(f"Username is a handle: {username}")
+            # Here you would typically resolve the handle to a DID
+        elif is_did:
+            # Handle the case where username is already a DID
+            print(f"Username is a DID: {username}")
+        
 
     #     pds_url = pds_endpoint(did_doc)
     #     print(f"account PDS: {pds_url}")
