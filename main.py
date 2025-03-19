@@ -146,6 +146,7 @@ def get_did_document(did):
         logging.warning(f"Could not find PDS URL in DID document for {did}")
         return did_document, None
     except httpx.HTTPStatusError as e:
+        # AI! please handle 410 status code "DID not available (tombstone)"
         if e.response.status_code == 404:
             logging.warning(f"DID not found: {did}")
             return None, None
