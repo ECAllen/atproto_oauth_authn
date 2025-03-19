@@ -16,7 +16,6 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
-# AI! please replace print with logging.info
 load_dotenv()
 
 # jclient_secret_jwk_str = os.getenv("CLIENT_SECRET_JWK") or exit(
@@ -91,7 +90,7 @@ def resolve_identity(username: str):
 
     elif re.match(DID_RE, username):
         # Handle the case where username is already a DID
-        print(f"Username is a DID: {username}")
+        logging.info(f"Username is a DID: {username}")
         return username
 
     return None
@@ -107,9 +106,9 @@ username = "spacetimedonuts.bsky.social"
 # 2) retrieve the users DID
 user_did = resolve_identity(username)
 if user_did:
-    print(f"Resolved username {username} to DID: {user_did}")
+    logging.info(f"Resolved username {username} to DID: {user_did}")
 else:
-    print(f"Failed to resolve username {username} to a DID")
+    logging.info(f"Failed to resolve username {username} to a DID")
 
 #     pds_url = pds_endpoint(did_doc)
 #     print(f"account PDS: {pds_url}")
