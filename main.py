@@ -223,9 +223,35 @@ if pds_url:
         logging.error("Failed to retrieve PDS metadata")
 
 # 6) from the metadata extract the authorization server
-# AI! please extract the authorization server from the metadata. here a example of the metedata {
-#  "resource": "https://fibercap.us-west.host.bsky.network",
-#  "authorization_servers": [
-#    "https://bsky.social"
-#  ],
-#  "scopes_supported": [],
+def extract_auth_server(metadata):
+    """
+    Extract the authorization server URL from the PDS metadata.
+    
+    Args:
+        metadata: The PDS metadata dictionary
+        
+    Returns:
+        The authorization server URL if found, None otherwise
+    """
+    if not metadata:
+        logging.error("Cannot extract authorization server: Metadata is None")
+        return None
+        
+    auth_servers = metadata.get("authorization_servers")
+    if not auth_servers or not isinstance(auth_servers, list) or len(auth_servers) == 0:
+        logging.error("No authorization servers found in metadata")
+        return None
+        
+    # Use the first authorization server in the list
+    auth_server = auth_servers[0]
+    logging.info(f"Found authorization server: {auth_server}")
+    return auth_server
+
+# If we have PDS metadata, extract the authorization server
+if pds_metadata:
+    auth_server = extract_auth_server(pds_metadata)
+    if auth_server:
+        logging.info(f"Authorization server URL: {auth_server}")
+        print(f"Authorization Server: {auth_server}")
+    else:
+        logging.error("Failed to extract authorization server from metadata")
