@@ -252,22 +252,73 @@ if pds_metadata:
         logging.error("Failed to extract authorization server from metadata")
 
 # 7) get the metadata of the authorization server
-    # AI! please go through the list of authoraiztion servers, and get the metadata of the first one availbale, only get metaddata from the first available server, if the first one is not available, then get the metadata of the second one, and so on
-    # please use the below javascript as a guide on what to extract, please replace the below javascript with python code
-    let userAuthServerDiscovery = null;
-    let userAuthorizationEndPoint = null;
-    let userTokenEndPoint = null;
-    let userPAREndPoint = null;
+def get_auth_server_metadata(auth_servers):
+    """
+    Retrieve the OAuth authorization server metadata from the first available server.
+    
+    Args:
+        auth_servers: List of authorization server URLs
+        
+    Returns:
+        A tuple containing (metadata, auth_endpoint, token_endpoint, par_endpoint)
+        All values will be None if no server is available
+    """
+    if not auth_servers or not isinstance(auth_servers, list):
+        logging.error("Cannot get auth server metadata: No authorization servers provided")
+        return None, None, None, None
+    
+    for auth_server in auth_servers:
+        metadata_url = f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
+        logging.info(f"Trying to fetch auth server metadata from: {metadata_url}")
+        
+        try:
+            response = httpx.get(metadata_url)
+            response.raise_for_status()
+            
+            metadata = response.json()
+            logging.info(f"Successfully retrieved auth server metadata from {auth_server}")
+            
+            # Extract endpoints from metadata
+            auth_endpoint = metadata.get("authorization_endpoint")
+            token_endpoint = metadata.get("token_endpoint")
+            par_endpoint = metadata.get("pushed_authorization_request_endpoint")
+            
+            if auth_endpoint and token_endpoint:
+                logging.info(f"Found authorization endpoint: {auth_endpoint}")
+                logging.info(f"Found token endpoint: {token_endpoint}")
+                if par_endpoint:
+                    logging.info(f"Found PAR endpoint: {par_endpoint}")
+                else:
+                    logging.warning("PAR endpoint not found in auth server metadata")
+                
+                return metadata, auth_endpoint, token_endpoint, par_endpoint
+            else:
+                logging.warning(f"Missing required endpoints in auth server metadata from {auth_server}")
+                continue
+                
+        except httpx.HTTPStatusError as e:
+            logging.warning(f"HTTP error occurred while retrieving auth server metadata from {auth_server}: {e}")
+            continue
+        except httpx.RequestError as e:
+            logging.warning(f"Request error occurred while retrieving auth server metadata from {auth_server}: {e}")
+            continue
+        except json.JSONDecodeError:
+            logging.warning(f"Failed to parse JSON response from auth server metadata retrieval from {auth_server}")
+            continue
+    
+    logging.error("Failed to retrieve metadata from any authorization server")
+    return None, None, None, None
 
-    let url = userAuthServerURL + "/.well-known/oauth-authorization-server";
-    fetch( url ).then( response => {
-        // Process the HTTP Response
-        return response.json();
-    }).then( data => {
-        // Process the HTTP Response Body
-        userAuthServerDiscovery   = data;
-        userAuthorizationEndPoint = userAuthServerDiscovery.authorization_endpoint;
-        userTokenEndPoint         = userAuthServerDiscovery.token_endpoint;
-        userPAREndPoint           = userAuthServerDiscovery.pushed_authorization_request_endpoint;
-    });
+# If we have authorization servers, get the metadata from the first available one
+if auth_servers:
+    auth_metadata, auth_endpoint, token_endpoint, par_endpoint = get_auth_server_metadata(auth_servers)
+    
+    if auth_metadata:
+        logging.info("Auth server metadata retrieved successfully")
+        print("Auth Server Endpoints:")
+        print(f"  Authorization: {auth_endpoint}")
+        print(f"  Token: {token_endpoint}")
+        print(f"  PAR: {par_endpoint or 'Not available'}")
+    else:
+        logging.error("Failed to retrieve auth server metadata from any server")
 
