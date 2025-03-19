@@ -323,11 +323,25 @@ if pds_metadata:
         logging.error("Failed to extract authorization server from metadata")
 
 # 7) get the metadata of the authorization server
-# AI! please create a function that will create a state value for a oauth PAR request, the state vaule needs to have the following properties:# If we have authorization servers, get the metadata from the first available one
-# The state parameter should be a random string that is unpredictable and unique for each authorization request
-# It should be at least 32 bytes (converted to a hex or base64 string)
-# It serves as a CSRF (Cross-Site Request Forgery) protection mechanism
-# The client application must store this value and validate it when receiving the authorization response
+def generate_oauth_state():
+    """
+    Generate a secure random state value for OAuth requests.
+    
+    The state value is a random string that is:
+    - Unpredictable and unique for each authorization request
+    - At least 32 bytes (converted to a hex string)
+    - Used as a CSRF protection mechanism
+    
+    Returns:
+        A secure random string to use as the state parameter
+    """
+    import secrets
+    
+    # Generate 32 bytes of random data and convert to hex
+    # This will result in a 64-character hex string
+    state = secrets.token_hex(32)
+    logging.info(f"Generated OAuth state parameter ({len(state)} characters)")
+    return state
 
 if auth_servers:
     auth_metadata, auth_endpoint, token_endpoint, par_endpoint = (
@@ -340,5 +354,12 @@ if auth_servers:
         print(f"  Authorization: {auth_endpoint}")
         print(f"  Token: {token_endpoint}")
         print(f"  PAR: {par_endpoint or 'Not available'}")
+        
+        # Generate a state parameter for OAuth request
+        oauth_state = generate_oauth_state()
+        print(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
+        
+        # In a real application, you would store this state value
+        # to validate it when receiving the authorization response
     else:
         logging.error("Failed to retrieve auth server metadata from any server")
