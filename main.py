@@ -9,14 +9,14 @@ import logging
 # Set up logging configuration
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(),  # Output to console
-        logging.FileHandler('app.log')  # Output to file
-    ]
+        logging.FileHandler("app.log"),  # Output to file
+    ],
 )
 logger = logging.getLogger(__name__)
-
+# AI! please replace print with logging.info
 load_dotenv()
 
 # jclient_secret_jwk_str = os.getenv("CLIENT_SECRET_JWK") or exit(
