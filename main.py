@@ -359,6 +359,8 @@ def generate_code_challenge(code_verifier):
     return code_challenge
 
 
+
+
 # 1) get users handle
 
 # Login can start with a handle, DID, or auth server URL. We are calling
