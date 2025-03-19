@@ -98,7 +98,13 @@ def resolve_identity(username: str):
         except json.JSONDecodeError:
             logging.info("Failed to parse JSON response from handle resolution")
             return None
-    return None
+    elif re.match(DID_RE, username):
+        # If the username is already a DID, return it directly
+        logging.info(f"Username is already a DID: {username}")
+        return username
+    else:
+        logging.warning(f"Username '{username}' is neither a valid handle nor a DID")
+        return None
 
 
 def get_did_document(did):
@@ -447,103 +453,108 @@ def send_par_request(
         return None, None
 
 
-# 1) get users handle
+# Main execution flow
 
-# Login can start with a handle, DID, or auth server URL. We are calling
-# whatever the user supplied the "username".
-username = "spacetimedonuts.bsky.social"
+def main():
+    """Main execution flow for the OAuth authentication process."""
+    # 1) get users handle
+    # Login can start with a handle, DID, or auth server URL
+    username = "spacetimedonuts.bsky.social"
+    logging.info(f"Starting OAuth flow for username: {username}")
 
-# 2) retrieve the users DID
-user_did = resolve_identity(username)
-if user_did:
+    # 2) retrieve the users DID
+    user_did = resolve_identity(username)
+    if not user_did:
+        logging.error(f"Failed to resolve username {username} to a DID")
+        return False
+
     logging.info(f"Resolved username {username} to DID: {user_did}")
-else:
-    logging.info(f"Failed to resolve username {username} to a DID")
 
-
-# 3) retrieve the user DID document
-# 4) get the URL of the PDS server from the DID doc
-# If we have a user DID, retrieve the DID document
-if user_did:
+    # 3) retrieve the user DID document
+    # 4) get the URL of the PDS server from the DID doc
     did_document, pds_url = get_did_document(user_did)
-    if did_document:
-        logging.info(f"Successfully retrieved DID document for {user_did}")
-    else:
-        logging.error(f"Failed to retrieve DID document for {user_did}")
+    if not did_document or not pds_url:
+        logging.error(f"Failed to retrieve DID document or PDS URL for {user_did}")
+        return False
 
+    logging.info(f"Successfully retrieved DID document for {user_did}")
 
-# 5) get the PDS server metadata from the well-known endpoint
-
-if pds_url:
+    # 5) get the PDS server metadata from the well-known endpoint
     pds_metadata = get_pds_metadata(pds_url)
-    if pds_metadata:
-        logging.info("PDS metadata retrieved successfully")
-    else:
+    if not pds_metadata:
         logging.error("Failed to retrieve PDS metadata")
+        return False
 
+    logging.info("PDS metadata retrieved successfully")
 
-# 6) from the metadata extract the authorization server
-# If we have PDS metadata, extract the authorization server
-if pds_metadata:
+    # 6) from the metadata extract the authorization server
     auth_servers = extract_auth_server(pds_metadata)
-    if auth_servers:
-        logging.info(f"Authorization server URL: {auth_servers[0]}")
-    else:
+    if not auth_servers:
         logging.error("Failed to extract authorization server from metadata")
+        return False
 
+    logging.info(f"Authorization server URL: {auth_servers[0]}")
 
-# 7) get the metadata of the authorization server
-
-if auth_servers:
+    # 7) get the metadata of the authorization server
     auth_metadata, auth_endpoint, token_endpoint, par_endpoint = (
         get_auth_server_metadata(auth_servers)
     )
 
-    if auth_metadata:
-        logging.info("Auth server metadata retrieved successfully")
-        print("Auth Server Endpoints:")
-        print(f"  Authorization: {auth_endpoint}")
-        print(f"  Token: {token_endpoint}")
-        print(f"  PAR: {par_endpoint or 'Not available'}")
-
-        # Generate a state parameter for OAuth request
-        oauth_state = generate_oauth_state()
-        print(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
-
-        # Generate a code_verifier for PKCE
-        code_verifier = generate_code_verifier()
-        print(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
-
-        # Generate a code_challenge from the code_verifier
-        code_challenge = generate_code_challenge(code_verifier)
-        print(f"Generated code_challenge: {code_challenge[:10]}... (truncated)")
-
-        # In a real application, you would store these values
-        # to use them when exchanging the authorization code for tokens
-        
-        # Send the PAR request if we have a PAR endpoint
-        if par_endpoint:
-            # Use the username as login_hint if available
-            request_uri, expires_in = send_par_request(
-                par_endpoint=par_endpoint,
-                code_challenge=code_challenge,
-                state=oauth_state,
-                login_hint=username
-            )
-            
-            if request_uri:
-                print(f"PAR request successful!")
-                print(f"Request URI: {request_uri}")
-                print(f"Expires in: {expires_in} seconds")
-                
-                # Construct the authorization URL
-                auth_url = f"{auth_endpoint}?client_id=https://madrilenyer.neocities.org/bsky/oauth/client-metadata.json&request_uri={request_uri}"
-                print(f"\nAuthorization URL:")
-                print(auth_url)
-                print("\nOpen this URL in a browser to complete the authorization process.")
-            else:
-                print("PAR request failed. Check the logs for details.")
-    else:
+    if not auth_metadata:
         logging.error("Failed to retrieve auth server metadata from any server")
+        return False
+
+    logging.info("Auth server metadata retrieved successfully")
+    print("Auth Server Endpoints:")
+    print(f"  Authorization: {auth_endpoint}")
+    print(f"  Token: {token_endpoint}")
+    print(f"  PAR: {par_endpoint or 'Not available'}")
+
+    # Generate a state parameter for OAuth request
+    oauth_state = generate_oauth_state()
+    print(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
+
+    # Generate a code_verifier for PKCE
+    code_verifier = generate_code_verifier()
+    print(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
+
+    # Generate a code_challenge from the code_verifier
+    code_challenge = generate_code_challenge(code_verifier)
+    print(f"Generated code_challenge: {code_challenge[:10]}... (truncated)")
+
+    # In a real application, you would store these values
+    # to use them when exchanging the authorization code for tokens
+    
+    # Send the PAR request if we have a PAR endpoint
+    if par_endpoint:
+        # Use the username as login_hint if available
+        request_uri, expires_in = send_par_request(
+            par_endpoint=par_endpoint,
+            code_challenge=code_challenge,
+            state=oauth_state,
+            login_hint=username
+        )
+        
+        if request_uri:
+            print(f"PAR request successful!")
+            print(f"Request URI: {request_uri}")
+            print(f"Expires in: {expires_in} seconds")
+            
+            # Construct the authorization URL
+            auth_url = f"{auth_endpoint}?client_id=https://madrilenyer.neocities.org/bsky/oauth/client-metadata.json&request_uri={request_uri}"
+            print(f"\nAuthorization URL:")
+            print(auth_url)
+            print("\nOpen this URL in a browser to complete the authorization process.")
+            return True
+        else:
+            print("PAR request failed. Check the logs for details.")
+            return False
+    else:
+        logging.warning("No PAR endpoint available, cannot proceed with OAuth flow")
+        return False
+
+
+if __name__ == "__main__":
+    main()
 
 
