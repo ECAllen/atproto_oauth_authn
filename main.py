@@ -58,7 +58,16 @@ def resolve_identity(username: str):
     if re.match(HANDLE_REGEX, username):
         # Handle the case where username is a handle
         logging.debug(f"Username is a handle: {username}")
-        # AI! the handle is in the form user.domain.tld please extract the domain and tld from the username
+        
+        # Extract domain and TLD from the handle
+        parts = username.split('.')
+        if len(parts) >= 2:
+            domain_tld = '.'.join(parts[1:])
+            logging.info(f"Extracted domain and TLD: {domain_tld}")
+        else:
+            logging.warning(f"Could not extract domain from handle: {username}")
+            domain_tld = None
+            
         url = f"https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle={username}"
 
         # Make HTTP request to resolve handle to DID
