@@ -150,8 +150,7 @@ def get_did_document(did):
             logging.warning(f"DID not found: {did}")
             return None, None
         elif e.response.status_code == 410:
-            # AI! can you make the tombstone a emoji?
-            logging.warning(f"DID not available (tombstone): {did}")
+            logging.warning(f"DID not available (tombstone) 🪦: {did}")
             return None, None
         else:
             logging.error(f"HTTP error occurred while retrieving DID document: {e}")
