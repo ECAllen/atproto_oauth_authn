@@ -359,6 +359,92 @@ def generate_code_challenge(code_verifier):
     return code_challenge
 
 
+def send_par_request(
+    par_endpoint,
+    code_challenge,
+    state,
+    login_hint=None,
+    client_id="https://madrilenyer.neocities.org/bsky/oauth/client-metadata.json",
+    redirect_uri="https://madrilenyer.neocities.org/bsky/oauth/callback/",
+    scope="atproto transition:generic",
+):
+    """
+    Send a Pushed Authorization Request (PAR) to the authorization server.
+    
+    Args:
+        par_endpoint: The PAR endpoint URL from the authorization server metadata
+        code_challenge: The PKCE code challenge generated from the code verifier
+        state: The OAuth state parameter for CSRF protection
+        login_hint: Optional handle or DID to pre-fill the login form
+        client_id: The OAuth client ID (URL to client metadata)
+        redirect_uri: The callback URL where the authorization code will be sent
+        scope: The requested OAuth scopes
+        
+    Returns:
+        A tuple containing (request_uri, expires_in) if successful, (None, None) otherwise
+    """
+    if not par_endpoint:
+        logging.error("Cannot send PAR request: PAR endpoint is None")
+        return None, None
+    
+    # Prepare the request parameters
+    params = {
+        "response_type": "code",
+        "code_challenge_method": "S256",
+        "scope": scope,
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "code_challenge": code_challenge,
+        "state": state,
+    }
+    
+    # Add login_hint if provided
+    if login_hint:
+        params["login_hint"] = login_hint
+    
+    logging.info(f"Sending PAR request to: {par_endpoint}")
+    logging.debug(f"PAR request parameters: {params}")
+    
+    try:
+        # Send the POST request with form-encoded body
+        response = httpx.post(
+            par_endpoint,
+            data=params,
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
+        response.raise_for_status()
+        
+        # Parse the JSON response
+        data = response.json()
+        logging.info("PAR request successful")
+        
+        # Extract the request_uri and expires_in values
+        request_uri = data.get("request_uri")
+        expires_in = data.get("expires_in")
+        
+        if request_uri:
+            logging.info(f"Received request_uri: {request_uri}")
+            logging.info(f"Request URI expires in: {expires_in} seconds")
+            return request_uri, expires_in
+        else:
+            logging.error("No request_uri found in PAR response")
+            return None, None
+            
+    except httpx.HTTPStatusError as e:
+        logging.error(f"HTTP error occurred during PAR request: {e}")
+        try:
+            # Try to extract error details from response
+            error_data = e.response.json()
+            logging.error(f"Error details: {error_data}")
+        except:
+            pass
+        return None, None
+    except httpx.RequestError as e:
+        logging.error(f"Request error occurred during PAR request: {e}")
+        return None, None
+    except json.JSONDecodeError:
+        logging.error("Failed to parse JSON response from PAR request")
+        return None, None
 
 
 # 1) get users handle
@@ -461,89 +547,3 @@ if auth_servers:
         logging.error("Failed to retrieve auth server metadata from any server")
 
 
-def send_par_request(
-    par_endpoint,
-    code_challenge,
-    state,
-    login_hint=None,
-    client_id="https://madrilenyer.neocities.org/bsky/oauth/client-metadata.json",
-    redirect_uri="https://madrilenyer.neocities.org/bsky/oauth/callback/",
-    scope="atproto transition:generic",
-):
-    """
-    Send a Pushed Authorization Request (PAR) to the authorization server.
-    
-    Args:
-        par_endpoint: The PAR endpoint URL from the authorization server metadata
-        code_challenge: The PKCE code challenge generated from the code verifier
-        state: The OAuth state parameter for CSRF protection
-        login_hint: Optional handle or DID to pre-fill the login form
-        client_id: The OAuth client ID (URL to client metadata)
-        redirect_uri: The callback URL where the authorization code will be sent
-        scope: The requested OAuth scopes
-        
-    Returns:
-        A tuple containing (request_uri, expires_in) if successful, (None, None) otherwise
-    """
-    if not par_endpoint:
-        logging.error("Cannot send PAR request: PAR endpoint is None")
-        return None, None
-    
-    # Prepare the request parameters
-    params = {
-        "response_type": "code",
-        "code_challenge_method": "S256",
-        "scope": scope,
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        "code_challenge": code_challenge,
-        "state": state,
-    }
-    
-    # Add login_hint if provided
-    if login_hint:
-        params["login_hint"] = login_hint
-    
-    logging.info(f"Sending PAR request to: {par_endpoint}")
-    logging.debug(f"PAR request parameters: {params}")
-    
-    try:
-        # Send the POST request with form-encoded body
-        response = httpx.post(
-            par_endpoint,
-            data=params,
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
-        response.raise_for_status()
-        
-        # Parse the JSON response
-        data = response.json()
-        logging.info("PAR request successful")
-        
-        # Extract the request_uri and expires_in values
-        request_uri = data.get("request_uri")
-        expires_in = data.get("expires_in")
-        
-        if request_uri:
-            logging.info(f"Received request_uri: {request_uri}")
-            logging.info(f"Request URI expires in: {expires_in} seconds")
-            return request_uri, expires_in
-        else:
-            logging.error("No request_uri found in PAR response")
-            return None, None
-            
-    except httpx.HTTPStatusError as e:
-        logging.error(f"HTTP error occurred during PAR request: {e}")
-        try:
-            # Try to extract error details from response
-            error_data = e.response.json()
-            logging.error(f"Error details: {error_data}")
-        except:
-            pass
-        return None, None
-    except httpx.RequestError as e:
-        logging.error(f"Request error occurred during PAR request: {e}")
-        return None, None
-    except json.JSONDecodeError:
-        logging.error("Failed to parse JSON response from PAR request")
-        return None, None
