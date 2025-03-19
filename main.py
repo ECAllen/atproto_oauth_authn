@@ -145,10 +145,13 @@ def get_did_document(did):
 
         logging.warning(f"Could not find PDS URL in DID document for {did}")
         return did_document, None
-    # AI! please handle 404 "DID not found"
     except httpx.HTTPStatusError as e:
-        logging.error(f"HTTP error occurred while retrieving DID document: {e}")
-        return None, None
+        if e.response.status_code == 404:
+            logging.warning(f"DID not found: {did}")
+            return None, None
+        else:
+            logging.error(f"HTTP error occurred while retrieving DID document: {e}")
+            return None, None
     except httpx.RequestError as e:
         logging.error(f"Request error occurred while retrieving DID document: {e}")
         return None, None
