@@ -370,13 +370,13 @@ def send_par_request(
     code_challenge,
     state,
     login_hint=None,
-    client_id="https://madrilenyer.neocities.org/bsky/oauth/client-metadata.json",
-    redirect_uri="https://madrilenyer.neocities.org/bsky/oauth/callback/",
+    client_id=None,
+    redirect_uri=None,
     scope="atproto transition:generic",
 ):
     """
     Send a Pushed Authorization Request (PAR) to the authorization server.
-    
+
     Args:
         par_endpoint: The PAR endpoint URL from the authorization server metadata
         code_challenge: The PKCE code challenge generated from the code verifier
@@ -385,14 +385,14 @@ def send_par_request(
         client_id: The OAuth client ID (URL to client metadata)
         redirect_uri: The callback URL where the authorization code will be sent
         scope: The requested OAuth scopes
-        
+
     Returns:
         A tuple containing (request_uri, expires_in) if successful, (None, None) otherwise
     """
     if not par_endpoint:
         logging.error("Cannot send PAR request: PAR endpoint is None")
         return None, None
-    
+
     # Prepare the request parameters
     params = {
         "response_type": "code",
@@ -403,31 +403,31 @@ def send_par_request(
         "code_challenge": code_challenge,
         "state": state,
     }
-    
+
     # Add login_hint if provided
     if login_hint:
         params["login_hint"] = login_hint
-    
+
     logging.info(f"Sending PAR request to: {par_endpoint}")
     logging.debug(f"PAR request parameters: {params}")
-    
+
     try:
         # Send the POST request with form-encoded body
         response = httpx.post(
             par_endpoint,
             data=params,
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         response.raise_for_status()
-        
+
         # Parse the JSON response
         data = response.json()
         logging.info("PAR request successful")
-        
+
         # Extract the request_uri and expires_in values
         request_uri = data.get("request_uri")
         expires_in = data.get("expires_in")
-        
+
         if request_uri:
             logging.info(f"Received request_uri: {request_uri}")
             logging.info(f"Request URI expires in: {expires_in} seconds")
@@ -435,7 +435,7 @@ def send_par_request(
         else:
             logging.error("No request_uri found in PAR response")
             return None, None
-            
+
     except httpx.HTTPStatusError as e:
         logging.error(f"HTTP error occurred during PAR request: {e}")
         try:
@@ -455,11 +455,12 @@ def send_par_request(
 
 # Main execution flow
 
+
 def main():
     """Main execution flow for the OAuth authentication process."""
     # 1) get users handle
     # Login can start with a handle, DID, or auth server URL
-    username = "spacetimedonuts.bsky.social"
+    username = "<someuser>.bsky.social"
     logging.info(f"Starting OAuth flow for username: {username}")
 
     # 2) retrieve the users DID
@@ -524,7 +525,7 @@ def main():
 
     # In a real application, you would store these values
     # to use them when exchanging the authorization code for tokens
-    
+
     # Send the PAR request if we have a PAR endpoint
     if par_endpoint:
         # Use the username as login_hint if available
@@ -532,17 +533,19 @@ def main():
             par_endpoint=par_endpoint,
             code_challenge=code_challenge,
             state=oauth_state,
-            login_hint=username
+            login_hint=username,
+            client_id="https://madrilenyer.neocities.org/bsky/oauth/client-metadata.json",
+            redirect_uri="https://madrilenyer.neocities.org/bsky/oauth/callback/",
         )
-        
+
         if request_uri:
-            print(f"PAR request successful!")
+            print("PAR request successful!")
             print(f"Request URI: {request_uri}")
             print(f"Expires in: {expires_in} seconds")
-            
+
             # Construct the authorization URL
             auth_url = f"{auth_endpoint}?client_id=https://madrilenyer.neocities.org/bsky/oauth/client-metadata.json&request_uri={request_uri}"
-            print(f"\nAuthorization URL:")
+            print("\nAuthorization URL:")
             print(auth_url)
             print("\nOpen this URL in a browser to complete the authorization process.")
             return True
@@ -556,5 +559,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

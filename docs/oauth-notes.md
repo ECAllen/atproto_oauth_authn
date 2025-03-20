@@ -128,6 +128,12 @@ let url = userAuthorizationEndPoint;
 iss: The "Authority"; in this case, the URL of the Bluesky Authorization Server
 
 state: The "state" parameter we send before in the PAR Request, and
+State
+
+The state parameter should be a random string that is unpredictable and unique for each authorization request
+It should be at least 32 bytes (converted to a hex or base64 string)
+It serves as a CSRF (Cross-Site Request Forgery) protection mechanism
+The client application must store this value and validate it when receiving the authorization response
 
 code: A (one single use) code that the application needs to retrieves the user's access token from the server.
 
