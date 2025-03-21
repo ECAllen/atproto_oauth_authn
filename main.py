@@ -46,7 +46,6 @@ DID_RE = re.compile(
 )
 
 
-# AI! please type all the functions in this file
 def resolve_identity(username: str):
     """
     Resolve a username (handle or DID) to a DID.
