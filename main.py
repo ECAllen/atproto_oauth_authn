@@ -46,8 +46,7 @@ DID_RE = re.compile(
 )
 
 
-# AI! please add typing to all the functions in this file, please also type the returns values
-def resolve_identity(username: str):
+def resolve_identity(username: str) -> str | None:
     """
     Resolve a username (handle or DID) to a DID.
 
@@ -108,7 +107,7 @@ def resolve_identity(username: str):
         return None
 
 
-def get_did_document(did):
+def get_did_document(did: str) -> tuple[dict | None, str | None]:
     """
     Retrieve the DID document for a given DID.
 
@@ -156,7 +155,7 @@ def get_did_document(did):
         return None, None
 
 
-def get_pds_metadata(pds_url):
+def get_pds_metadata(pds_url: str) -> dict | None:
     """
     Retrieve the OAuth protected resource metadata from the PDS server.
 
@@ -191,7 +190,7 @@ def get_pds_metadata(pds_url):
         return None
 
 
-def extract_auth_server(metadata):
+def extract_auth_server(metadata: dict) -> list[str] | None:
     """
     Extract the authorization server URL from the PDS metadata.
 
@@ -214,7 +213,7 @@ def extract_auth_server(metadata):
     return auth_servers
 
 
-def get_auth_server_metadata(auth_servers):
+def get_auth_server_metadata(auth_servers: list[str]) -> tuple[dict | None, str | None, str | None, str | None]:
     """
     Retrieve the OAuth authorization server metadata from the first available server.
 
@@ -286,7 +285,7 @@ def get_auth_server_metadata(auth_servers):
     return None, None, None, None
 
 
-def generate_oauth_state():
+def generate_oauth_state() -> str:
     """
     Generate a secure random state value for OAuth requests.
 
@@ -306,7 +305,7 @@ def generate_oauth_state():
     return state
 
 
-def generate_code_verifier(length=128):
+def generate_code_verifier(length: int = 128) -> str:
     """
     Generate a code_verifier for PKCE (Proof Key for Code Exchange) in OAuth.
 
@@ -339,7 +338,7 @@ def generate_code_verifier(length=128):
     return code_verifier
 
 
-def generate_code_challenge(code_verifier):
+def generate_code_challenge(code_verifier: str) -> str:
     """
     Generate a code_challenge from a code_verifier for PKCE in OAuth.
 
@@ -367,14 +366,14 @@ def generate_code_challenge(code_verifier):
 
 
 def send_par_request(
-    par_endpoint,
-    code_challenge,
-    state,
-    login_hint=None,
-    client_id=None,
-    redirect_uri=None,
-    scope="atproto transition:generic",
-):
+    par_endpoint: str,
+    code_challenge: str,
+    state: str,
+    login_hint: str | None = None,
+    client_id: str | None = None,
+    redirect_uri: str | None = None,
+    scope: str = "atproto transition:generic",
+) -> tuple[str | None, int | None]:
     """
     Send a Pushed Authorization Request (PAR) to the authorization server.
 
@@ -456,7 +455,7 @@ def send_par_request(
 # Main execution flow
 
 
-def main():
+def main() -> bool:
     load_dotenv()
     """Main execution flow for the OAuth authentication process."""
     # 1) get users handle
