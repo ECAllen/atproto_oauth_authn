@@ -46,6 +46,7 @@ DID_RE = re.compile(
 )
 
 
+# AI! please type all the functions in this file
 def resolve_identity(username: str):
     """
     Resolve a username (handle or DID) to a DID.
@@ -536,7 +537,7 @@ def main():
             state=oauth_state,
             login_hint=username,
             client_id=f"https://{app_url}/oauth/client-metadata.json",
-            redirect_uri=f"https://{app_url}/oauth/callback/",
+            redirect_uri=f"https://{app_url}/oauth/callback",
         )
 
         if request_uri:
@@ -545,9 +546,7 @@ def main():
             print(f"Expires in: {expires_in} seconds")
 
             # Construct the authorization URL
-            auth_url = f"{auth_endpoint}?\
-            client_id=https://madrilenyer.neocities.org/bsky/oauth/client-metadata.json\
-            &request_uri={request_uri}"
+            auth_url = f"{auth_endpoint}?client_id=https://{app_url}/oauth/client-metadata.json&request_uri={request_uri}"
             print("\nAuthorization URL:")
             print(auth_url)
             print("\nOpen this URL in a browser to complete the authorization process.")
