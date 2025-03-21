@@ -6,10 +6,11 @@ import httpx
 import logging
 import secrets
 import base64
+import os
 
 # Set up logging configuration
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(),  # Output to console
@@ -17,7 +18,6 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
-load_dotenv()
 
 # jclient_secret_jwk_str = os.getenv("CLIENT_SECRET_JWK") or exit(
 #     "Missing CLIENT_SECRET_JWK"
@@ -416,7 +416,6 @@ def send_par_request(
         response = httpx.post(
             par_endpoint,
             data=params,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         response.raise_for_status()
 
@@ -457,10 +456,12 @@ def send_par_request(
 
 
 def main():
+    load_dotenv()
     """Main execution flow for the OAuth authentication process."""
     # 1) get users handle
     # Login can start with a handle, DID, or auth server URL
-    username = "<someuser>.bsky.social"
+    username = os.getenv("USERNAME") or exit("Missing USERNAME")
+    app_url = os.getenv("APP_URL") or exit("Missing APP_URL")
     logging.info(f"Starting OAuth flow for username: {username}")
 
     # 2) retrieve the users DID
@@ -534,8 +535,8 @@ def main():
             code_challenge=code_challenge,
             state=oauth_state,
             login_hint=username,
-            client_id="https://madrilenyer.neocities.org/bsky/oauth/client-metadata.json",
-            redirect_uri="https://madrilenyer.neocities.org/bsky/oauth/callback/",
+            client_id=f"https://{app_url}/oauth/client-metadata.json",
+            redirect_uri=f"https://{app_url}/oauth/callback/",
         )
 
         if request_uri:
@@ -544,7 +545,9 @@ def main():
             print(f"Expires in: {expires_in} seconds")
 
             # Construct the authorization URL
-            auth_url = f"{auth_endpoint}?client_id=https://madrilenyer.neocities.org/bsky/oauth/client-metadata.json&request_uri={request_uri}"
+            auth_url = f"{auth_endpoint}?\
+            client_id=https://madrilenyer.neocities.org/bsky/oauth/client-metadata.json\
+            &request_uri={request_uri}"
             print("\nAuthorization URL:")
             print(auth_url)
             print("\nOpen this URL in a browser to complete the authorization process.")
