@@ -1,0 +1,27 @@
+
+handle /bsky/oauth/client-metadata.json {
+        respond `{
+  "client_id": "https://statmeet.com/oauth/client-metadata.json",
+  "application_type": "web",
+  "client_name": "Example Browser App",
+  "client_uri": "https://statmeet.com",
+  "dpop_bound_access_tokens": true,
+  "grant_types": [
+    "authorization_code",
+    "refresh_token"
+  ],
+  "redirect_uris": [
+    "https://statmeet.com/oauth/callback",
+    "https://statmeet.com/oauth/callback.localhost"
+  ],
+  "response_types": [
+    "code",
+    "code id_token"
+  ],
+  "scope": "atproto transition:generic transition:chat.bsky",
+  "token_endpoint_auth_method": "none"
+}` 200 {
+                Content-Type application/json
+        }
+}
+

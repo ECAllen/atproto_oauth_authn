@@ -546,11 +546,14 @@ def main() -> bool:
             print(f"Request URI: {request_uri}")
             print(f"Expires in: {expires_in} seconds")
 
-            # Construct the authorization URL with proper URI encoding
+            # Construct the authorization URL
             import urllib.parse
-            client_id = urllib.parse.quote(f"https://{app_url}/oauth/client-metadata.json")
-            request_uri_encoded = urllib.parse.quote(request_uri)
-            auth_url = f"{auth_endpoint}?client_id={client_id}&request_uri={request_uri_encoded}"
+
+            client_id_enc = urllib.parse.quote(
+                f"https://{app_url}/oauth/client-metadata.json", safe=""
+            )
+            request_uri_enc = urllib.parse.quote(request_uri)
+            auth_url = f"{auth_endpoint}?client_id={client_id_enc}&request_uri={request_uri_enc}"
             print("\nAuthorization URL:")
             print(auth_url)
             print("\nOpen this URL in a browser to complete the authorization process.")
