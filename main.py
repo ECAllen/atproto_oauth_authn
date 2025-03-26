@@ -213,7 +213,9 @@ def extract_auth_server(metadata: dict) -> list[str] | None:
     return auth_servers
 
 
-def get_auth_server_metadata(auth_servers: list[str]) -> tuple[dict | None, str | None, str | None, str | None]:
+def get_auth_server_metadata(
+    auth_servers: list[str],
+) -> tuple[dict | None, str | None, str | None, str | None]:
     """
     Retrieve the OAuth authorization server metadata from the first available server.
 
@@ -546,6 +548,7 @@ def main() -> bool:
 
             # Construct the authorization URL
             auth_url = f"{auth_endpoint}?client_id=https://{app_url}/oauth/client-metadata.json&request_uri={request_uri}"
+            # AI! please uri encode the auth_uri
             print("\nAuthorization URL:")
             print(auth_url)
             print("\nOpen this URL in a browser to complete the authorization process.")
