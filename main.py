@@ -434,9 +434,10 @@ def send_par_request(
             # Try to extract error details from response
             error_data = e.response.json()
             logging.error(f"Error details: {error_data}")
-        # AI!  please hdndle the exception
-        except:
-            pass
+        except json.JSONDecodeError:
+            logging.error("Could not parse error response as JSON")
+        except Exception as ex:
+            logging.error(f"Error extracting details from error response: {ex}")
         return None, None
     except httpx.RequestError as e:
         logging.error(f"Request error occurred during PAR request: {e}")
