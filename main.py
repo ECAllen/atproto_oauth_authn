@@ -1,4 +1,3 @@
-from authlib.jose import JsonWebKey
 from dotenv import load_dotenv
 import json
 import re
@@ -18,14 +17,6 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
-
-# jclient_secret_jwk_str = os.getenv("CLIENT_SECRET_JWK") or exit(
-#     "Missing CLIENT_SECRET_JWK"
-# )
-#
-# CLIENT_SECRET_JWK = JsonWebKey.import_key(client_secret_jwk_str)
-# CLIENT_PUB_JWK = json.loads(CLIENT_SECRET_JWK.as_json(is_private=False))
-# assert "d" not in CLIENT_PUB_JWK
 
 
 DOMAIN_RE = re.compile(
@@ -443,6 +434,7 @@ def send_par_request(
             # Try to extract error details from response
             error_data = e.response.json()
             logging.error(f"Error details: {error_data}")
+        # AI!  please hdndle the exception
         except:
             pass
         return None, None
@@ -531,14 +523,16 @@ def main() -> bool:
 
     # Send the PAR request if we have a PAR endpoint
     if par_endpoint:
+        client_id = f"https://{app_url}/oauth/client-metadata.json"
+        redirect_uri = f"https://{app_url}/oauth/callback"
         # Use the username as login_hint if available
         request_uri, expires_in = send_par_request(
             par_endpoint=par_endpoint,
             code_challenge=code_challenge,
             state=oauth_state,
             login_hint=username,
-            client_id=f"https://{app_url}/oauth/client-metadata.json",
-            redirect_uri=f"https://{app_url}/oauth/callback",
+            client_id=client_id,
+            redirect_uri=redirect_uri,
         )
 
         if request_uri:
@@ -547,16 +541,16 @@ def main() -> bool:
             print(f"Expires in: {expires_in} seconds")
 
             # Construct the authorization URL
-            import urllib.parse
+            import urllib.parse  # noqa: E402
 
-            client_id_enc = urllib.parse.quote(
-                f"https://{app_url}/oauth/client-metadata.json", safe=""
-            )
-            request_uri_enc = urllib.parse.quote(request_uri)
+            client_id_enc = urllib.parse.quote(client_id, safe="")
+            request_uri_enc = urllib.parse.quote(request_uri, safe="")
             auth_url = f"{auth_endpoint}?client_id={client_id_enc}&request_uri={request_uri_enc}"
             print("\nAuthorization URL:")
-            print(auth_url)
-            print("\nOpen this URL in a browser to complete the authorization process.")
+            print(f"{auth_endpoint}?client_id={client_id}&request_uri={request_uri}")
+            import webbrowser
+
+            webbrowser.open(auth_url)
             return True
         else:
             print("PAR request failed. Check the logs for details.")
