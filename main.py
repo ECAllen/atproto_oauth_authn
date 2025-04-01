@@ -6,6 +6,8 @@ import logging
 import secrets
 import base64
 import os
+import urllib.parse
+import ipaddress
 
 # Set up logging configuration
 logging.basicConfig(
@@ -62,6 +64,11 @@ def resolve_identity(username: str) -> str | None:
 
         url = f"https://{domain_tld}/xrpc/com.atproto.identity.resolveHandle?handle={username}"
 
+        # Check URL for SSRF vulnerabilities
+        if not is_safe_url(url):
+            logging.error(f"SSRF protection: Blocked request to potentially unsafe URL: {url}")
+            return None
+
         # Make HTTP request to resolve handle to DID
         try:
             response = httpx.get(url)
@@ -109,6 +116,11 @@ def get_did_document(did: str) -> tuple[dict | None, str | None]:
         The DID document as a dictionary if successful, None otherwise
     """
     url = f"https://plc.directory/{did}"
+
+    # Check URL for SSRF vulnerabilities
+    if not is_safe_url(url):
+        logging.error(f"SSRF protection: Blocked request to potentially unsafe URL: {url}")
+        return None, None
 
     try:
         # Make HTTP request to retrieve the DID document
@@ -163,6 +175,11 @@ def get_pds_metadata(pds_url: str) -> dict | None:
     metadata_url = f"{pds_url.rstrip('/')}/.well-known/oauth-protected-resource"
     logging.info(f"Fetching PDS metadata from: {metadata_url}")
 
+    # Check URL for SSRF vulnerabilities
+    if not is_safe_url(metadata_url):
+        logging.error(f"SSRF protection: Blocked request to potentially unsafe URL: {metadata_url}")
+        return None
+
     try:
         response = httpx.get(metadata_url)
         response.raise_for_status()
@@ -179,6 +196,65 @@ def get_pds_metadata(pds_url: str) -> dict | None:
     except json.JSONDecodeError:
         logging.error("Failed to parse JSON response from PDS metadata retrieval")
         return None
+
+
+def is_safe_url(url: str) -> bool:
+    """
+    Validate if a URL is safe to make a request to.
+    
+    Implements SSRF protections by:
+    - Ensuring HTTPS protocol
+    - Checking for private IP ranges or localhost
+    - Validating against known AT Protocol domains
+    
+    Args:
+        url: The URL to validate
+        
+    Returns:
+        True if the URL is considered safe, False otherwise
+    """
+    try:
+        parsed = urllib.parse.urlparse(url)
+        
+        # Ensure HTTPS protocol
+        if parsed.scheme != 'https':
+            logging.warning(f"SSRF protection: Rejected non-HTTPS URL: {url}")
+            return False
+            
+        # Check for private IP ranges or localhost
+        hostname = parsed.netloc.split(':')[0]
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_unspecified:
+                logging.warning(f"SSRF protection: Rejected URL with private/reserved IP: {url}")
+                return False
+        except ValueError:
+            # Not an IP address, continue with hostname checks
+            pass
+            
+        # Reject localhost and common internal hostnames
+        if hostname == 'localhost' or hostname.endswith('.local') or hostname.endswith('.internal'):
+            logging.warning(f"SSRF protection: Rejected internal hostname: {url}")
+            return False
+            
+        # Check for numeric IP in hostname to catch IP literals like 0177.0.0.1
+        if re.match(r'^\d+\.\d+\.\d+\.\d+$', hostname):
+            try:
+                ip = ipaddress.ip_address(hostname)
+                if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_unspecified:
+                    logging.warning(f"SSRF protection: Rejected numeric IP hostname: {url}")
+                    return False
+            except ValueError:
+                logging.warning(f"SSRF protection: Rejected unusual numeric hostname: {url}")
+                return False
+        
+        # Additional checks for AT Protocol domains could be added here
+        # For example, maintain an allowlist of known AT Protocol domains
+        
+        return True
+    except Exception as e:
+        logging.error(f"SSRF protection: URL validation error: {e}")
+        return False
 
 
 def extract_auth_server(metadata: dict) -> list[str] | None:
@@ -228,6 +304,11 @@ def get_auth_server_metadata(
             f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
         )
         logging.info(f"Trying to fetch auth server metadata from: {metadata_url}")
+
+        # Check URL for SSRF vulnerabilities
+        if not is_safe_url(metadata_url):
+            logging.error(f"SSRF protection: Blocked request to potentially unsafe URL: {metadata_url}")
+            continue
 
         try:
             response = httpx.get(metadata_url)
@@ -403,6 +484,11 @@ def send_par_request(
 
     logging.info(f"Sending PAR request to: {par_endpoint}")
     logging.debug(f"PAR request parameters: {params}")
+
+    # Check URL for SSRF vulnerabilities
+    if not is_safe_url(par_endpoint):
+        logging.error(f"SSRF protection: Blocked request to potentially unsafe URL: {par_endpoint}")
+        return None, None
 
     try:
         # Send the POST request with form-encoded body
