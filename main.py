@@ -248,8 +248,28 @@ def is_safe_url(url: str) -> bool:
                 logging.warning(f"SSRF protection: Rejected unusual numeric hostname: {url}")
                 return False
         
-        # Additional checks for AT Protocol domains could be added here
-        # For example, maintain an allowlist of known AT Protocol domains
+        # Whitelist of known AT Protocol domains
+        known_at_protocol_domains = {
+            # Official Bluesky domains
+            'bsky.social', 'bsky.app', 'bsky.network',
+            # PLC directory
+            'plc.directory',
+            # Common PDS providers
+            'blueskyweb.xyz', 'staging.bsky.dev',
+            # Common third-party PDS providers
+            'pds.public.url', 'atproto.com',
+            # Add more known domains as needed
+        }
+        
+        # Check if the hostname is a subdomain of a known AT Protocol domain
+        domain_parts = hostname.split('.')
+        for i in range(len(domain_parts) - 1):
+            potential_domain = '.'.join(domain_parts[i:])
+            if potential_domain in known_at_protocol_domains:
+                return True
+                
+        # For domains not in the whitelist, log a warning but still allow if other checks passed
+        logging.warning(f"SSRF protection: URL hostname not in AT Protocol whitelist: {hostname}")
         
         return True
     except Exception as e:
