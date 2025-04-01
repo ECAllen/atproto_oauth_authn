@@ -448,8 +448,6 @@ def send_par_request(
 
 
 # Main execution flow
-
-
 def main() -> bool:
     load_dotenv()
     """Main execution flow for the OAuth authentication process."""
