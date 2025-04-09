@@ -647,7 +647,7 @@ def main() -> bool:
     print(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
 
     # Generate a code_verifier for PKCE
-    code_verifier = generate_code_verifier()
+    code_verifier = generate_code_verifier(48)
     print(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
 
     # Generate a code_challenge from the code_verifier
