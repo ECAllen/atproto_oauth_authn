@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 import logging
 import os
-import atproto_oauth_authn
+from atproto_oauth_authn.authn import resolve_identity
 
 
 # Set up logging configuration
