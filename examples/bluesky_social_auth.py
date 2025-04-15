@@ -1,17 +1,7 @@
 from dotenv import load_dotenv
 import logging
 import os
-from atproto_oauth_authn.authn import (
-    resolve_identity,
-    get_did_document,
-    get_pds_metadata,
-    extract_auth_server,
-    get_auth_server_metadata,
-    generate_oauth_state,
-    generate_code_verifier,
-    generate_code_challenge,
-    send_par_request,
-)
+import atproto_oauth_authn
 
 
 # Set up logging configuration
@@ -37,7 +27,7 @@ def main() -> bool:
     logging.info(f"Starting OAuth flow for username: {username}")
 
     # 2) retrieve the users DID
-    user_did = resolve_identity(username)
+    user_did = atproto_oauth_authn.resolve_identity(username)
     if not user_did:
         logging.error(f"Failed to resolve username {username} to a DID")
         return False
@@ -46,6 +36,7 @@ def main() -> bool:
 
     # 3) retrieve the user DID document
     # 4) get the URL of the PDS server from the DID doc
+    # AI! please fix all imports from atproto_oauth_authn
     did_document, pds_url = get_did_document(user_did)
     if not did_document or not pds_url:
         logging.error(f"Failed to retrieve DID document or PDS URL for {user_did}")
