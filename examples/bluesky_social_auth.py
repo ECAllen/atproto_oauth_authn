@@ -36,8 +36,7 @@ def main() -> bool:
 
     # 3) retrieve the user DID document
     # 4) get the URL of the PDS server from the DID doc
-    # AI! please fix all imports from atproto_oauth_authn
-    did_document, pds_url = get_did_document(user_did)
+    did_document, pds_url = atproto_oauth_authn.get_did_document(user_did)
     if not did_document or not pds_url:
         logging.error(f"Failed to retrieve DID document or PDS URL for {user_did}")
         return False
@@ -45,7 +44,7 @@ def main() -> bool:
     logging.info(f"Successfully retrieved DID document for {user_did}")
 
     # 5) get the PDS server metadata from the well-known endpoint
-    pds_metadata = get_pds_metadata(pds_url)
+    pds_metadata = atproto_oauth_authn.get_pds_metadata(pds_url)
     if not pds_metadata:
         logging.error("Failed to retrieve PDS metadata")
         return False
@@ -53,7 +52,7 @@ def main() -> bool:
     logging.info("PDS metadata retrieved successfully")
 
     # 6) from the metadata extract the authorization server
-    auth_servers = extract_auth_server(pds_metadata)
+    auth_servers = atproto_oauth_authn.extract_auth_server(pds_metadata)
     if not auth_servers:
         logging.error("Failed to extract authorization server from metadata")
         return False
@@ -62,7 +61,7 @@ def main() -> bool:
 
     # 7) get the metadata of the authorization server
     auth_metadata, auth_endpoint, token_endpoint, par_endpoint = (
-        get_auth_server_metadata(auth_servers)
+        atproto_oauth_authn.get_auth_server_metadata(auth_servers)
     )
 
     if not auth_metadata:
@@ -76,16 +75,16 @@ def main() -> bool:
     print(f"  PAR: {par_endpoint or 'Not available'}")
 
     # Generate a state parameter for OAuth request
-    oauth_state = generate_oauth_state()
+    oauth_state = atproto_oauth_authn.generate_oauth_state()
     print(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
 
     # Generate a code_verifier for PKCE
     # TODO very param for code_verifier length
-    code_verifier = generate_code_verifier(48)
+    code_verifier = atproto_oauth_authn.generate_code_verifier(48)
     print(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
 
     # Generate a code_challenge from the code_verifier
-    code_challenge = generate_code_challenge(code_verifier)
+    code_challenge = atproto_oauth_authn.generate_code_challenge(code_verifier)
     print(f"Generated code_challenge: {code_challenge[:10]}... (truncated)")
 
     # In a real application, you would store these values
@@ -96,7 +95,7 @@ def main() -> bool:
         client_id = f"https://{app_url}/oauth/client-metadata.json"
         redirect_uri = f"https://{app_url}/oauth/callback"
         # Use the username as login_hint if available
-        request_uri, expires_in = send_par_request(
+        request_uri, expires_in = atproto_oauth_authn.send_par_request(
             par_endpoint=par_endpoint,
             code_challenge=code_challenge,
             state=oauth_state,
