@@ -17,7 +17,7 @@ wheels = [
 [[package]]
 name = "atproto-oauth-authn"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "authlib" },
     { name = "dotenv" },
@@ -30,6 +30,9 @@ requires-dist = [
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "httpx", specifier = ">=0.28.1" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "atproto-oauth-authn", editable = "." }]
 
 [[package]]
 name = "authlib"

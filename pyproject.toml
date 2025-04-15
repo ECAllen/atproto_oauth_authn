@@ -1,9 +1,11 @@
 [project]
 name = "atproto-oauth-authn"
 version = "0.1.0"
-description = "Add your description here"
+description = "AT Protocol OAuth authentication client for Python"
 readme = "README.md"
+authors = [{name = "ecallen", email = "ethancallen@gmail.com"}]
 requires-python = ">=3.13"
+license = {text = "MIT"}
 dependencies = [
     "authlib>=1.5.1",
     "dotenv>=0.9.9",
