@@ -30,23 +30,25 @@ def authn_url(username: str) -> str:
     logging.info(f"Resolved username {username} to DID: {user_did}")
 
     # 3) retrieve the user DID document
-    # 4) get the URL of the PDS server from the DID doc
     try:
-        did_document, pds_url = atproto_oauth_authn.get_did_document(user_did)
-        if not did_document or not pds_url:
-            logging.error(f"Failed to retrieve DID document or PDS URL for {user_did}")
-            return False
+        did_document = atproto_oauth_authn.retrieve_did_document(user_did)
     except Exception as e:
         logging.error(f"Failed to retrieve DID document for {user_did}: {e}")
         raise
 
-    # logging.info(f"Successfully retrieved DID document for {user_did}")
+    # 4) get the URL of the PDS server from the DID doc
+    try:
+        pds_url = atproto_oauth_authn.extract_pds_url(did_document)
+    except Exception as e:
+        logging.error(f"Failed to extract PDS URL from DID document: {e}")
+        raise
 
-    # # 5) get the PDS server metadata from the well-known endpoint
-    # pds_metadata = atproto_oauth_authn.get_pds_metadata(pds_url)
-    # if not pds_metadata:
-    #     logging.error("Failed to retrieve PDS metadata")
-    #     return False
+    # 5) get the PDS server metadata from the well-known endpoint
+    # AI! please wrap this in a try/except block
+    pds_metadata = atproto_oauth_authn.get_pds_metadata(pds_url)
+    if not pds_metadata:
+        logging.error("Failed to retrieve PDS metadata")
+        return False
 
     # logging.info("PDS metadata retrieved successfully")
 
