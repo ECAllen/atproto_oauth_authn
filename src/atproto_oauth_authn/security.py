@@ -6,6 +6,8 @@ import ipaddress
 import urllib.parse
 from typing import Set
 
+from .exceptions import SecurityError
+
 logger = logging.getLogger(__name__)
 
 # Known AT Protocol domains
@@ -34,42 +36,53 @@ def is_safe_url(url: str) -> bool:
         url: The URL to validate
         
     Returns:
-        True if the URL is considered safe, False otherwise
+        True if the URL is considered safe
+        
+    Raises:
+        SecurityError: If the URL fails security checks
     """
+    if not url:
+        raise SecurityError("URL cannot be empty")
+        
     try:
         parsed = urllib.parse.urlparse(url)
         
         # Ensure HTTPS protocol
         if parsed.scheme != 'https':
-            logger.warning(f"SSRF protection: Rejected non-HTTPS URL: {url}")
-            return False
+            error_msg = f"SSRF protection: Rejected non-HTTPS URL: {url}"
+            logger.warning(error_msg)
+            raise SecurityError(error_msg)
             
         # Check for private IP ranges or localhost
         hostname = parsed.netloc.split(':')[0]
         try:
             ip = ipaddress.ip_address(hostname)
             if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_unspecified:
-                logger.warning(f"SSRF protection: Rejected URL with private/reserved IP: {url}")
-                return False
+                error_msg = f"SSRF protection: Rejected URL with private/reserved IP: {url}"
+                logger.warning(error_msg)
+                raise SecurityError(error_msg)
         except ValueError:
             # Not an IP address, continue with hostname checks
             pass
             
         # Reject localhost and common internal hostnames
         if hostname == 'localhost' or hostname.endswith('.local') or hostname.endswith('.internal'):
-            logger.warning(f"SSRF protection: Rejected internal hostname: {url}")
-            return False
+            error_msg = f"SSRF protection: Rejected internal hostname: {url}"
+            logger.warning(error_msg)
+            raise SecurityError(error_msg)
             
         # Check for numeric IP in hostname to catch IP literals like 0177.0.0.1
         if re.match(r'^\d+\.\d+\.\d+\.\d+$', hostname):
             try:
                 ip = ipaddress.ip_address(hostname)
                 if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_unspecified:
-                    logger.warning(f"SSRF protection: Rejected numeric IP hostname: {url}")
-                    return False
+                    error_msg = f"SSRF protection: Rejected numeric IP hostname: {url}"
+                    logger.warning(error_msg)
+                    raise SecurityError(error_msg)
             except ValueError:
-                logger.warning(f"SSRF protection: Rejected unusual numeric hostname: {url}")
-                return False
+                error_msg = f"SSRF protection: Rejected unusual numeric hostname: {url}"
+                logger.warning(error_msg)
+                raise SecurityError(error_msg)
         
         # Whitelist of known AT Protocol domains
         domain_parts = hostname.split('.')
@@ -82,6 +95,10 @@ def is_safe_url(url: str) -> bool:
         logger.warning(f"SSRF protection: URL hostname not in AT Protocol whitelist: {hostname}")
         
         return True
+    except SecurityError:
+        # Re-raise security errors
+        raise
     except Exception as e:
-        logger.error(f"SSRF protection: URL validation error: {e}")
-        return False
+        error_msg = f"SSRF protection: URL validation error: {e}"
+        logger.error(error_msg)
+        raise SecurityError(error_msg)

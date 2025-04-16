@@ -2,15 +2,16 @@
 
 import logging
 import json
-from typing import Optional, Tuple, Dict, Any
+from typing import Tuple, Dict, Any
 
 import httpx
 
 from .security import is_safe_url
+from .exceptions import DidDocumentError, SecurityError
 
 logger = logging.getLogger(__name__)
 
-def get_did_document(did: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+def get_did_document(did: str) -> Tuple[Dict[str, Any], str]:
     """
     Retrieve the DID document for a given DID.
     
@@ -18,14 +19,23 @@ def get_did_document(did: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]
         did: The DID to retrieve the document for
         
     Returns:
-        The DID document as a dictionary if successful, None otherwise
+        A tuple containing the DID document as a dictionary and the PDS URL
+        
+    Raises:
+        DidDocumentError: If the DID document cannot be retrieved or parsed
+        SecurityError: If there's a security issue with the URL
     """
+    if not did:
+        raise DidDocumentError("DID cannot be empty")
+        
     url = f"https://plc.directory/{did}"
     
     # Check URL for SSRF vulnerabilities
-    if not is_safe_url(url):
-        logger.error(f"SSRF protection: Blocked request to potentially unsafe URL: {url}")
-        return None, None
+    try:
+        is_safe_url(url)
+    except SecurityError:
+        logger.error(f"Security check failed for URL: {url}")
+        raise
 
     try:
         # Make HTTP request to retrieve the DID document
@@ -43,21 +53,27 @@ def get_did_document(did: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]
                 logger.info(f"User's PDS URL: {pds_url}")
                 return did_document, pds_url
         
-        logger.warning(f"Could not find PDS URL in DID document for {did}")
-        return did_document, None
+        error_msg = f"Could not find PDS URL in DID document for {did}"
+        logger.warning(error_msg)
+        raise DidDocumentError(error_msg)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            logger.warning(f"DID not found: {did}")
-            return None, None
+            error_msg = f"DID not found: {did}"
+            logger.warning(error_msg)
+            raise DidDocumentError(error_msg)
         elif e.response.status_code == 410:
-            logger.warning(f"DID not available (tombstone) 🪦: {did}")
-            return None, None
+            error_msg = f"DID not available (tombstone) 🪦: {did}"
+            logger.warning(error_msg)
+            raise DidDocumentError(error_msg)
         else:
-            logger.error(f"HTTP error occurred while retrieving DID document: {e}")
-            return None, None
+            error_msg = f"HTTP error occurred while retrieving DID document: {e}"
+            logger.error(error_msg)
+            raise DidDocumentError(error_msg)
     except httpx.RequestError as e:
-        logger.error(f"Request error occurred while retrieving DID document: {e}")
-        return None, None
+        error_msg = f"Request error occurred while retrieving DID document: {e}"
+        logger.error(error_msg)
+        raise DidDocumentError(error_msg)
     except json.JSONDecodeError:
-        logger.error(f"Failed to parse JSON response from DID document retrieval")
-        return None, None
+        error_msg = f"Failed to parse JSON response from DID document retrieval"
+        logger.error(error_msg)
+        raise DidDocumentError(error_msg)

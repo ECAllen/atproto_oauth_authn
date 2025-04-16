@@ -29,8 +29,18 @@ from .oauth import (
 )
 from .security import is_safe_url
 from .utils import build_auth_url
+from .exceptions import (
+    AtprotoOauthError,
+    IdentityResolutionError,
+    DidDocumentError,
+    MetadataError,
+    OauthFlowError,
+    SecurityError,
+    InvalidParameterError,
+)
 
 __all__ = [
+    # Core functionality
     "resolve_identity",
     "get_did_document",
     "get_pds_metadata",
@@ -42,4 +52,13 @@ __all__ = [
     "send_par_request",
     "is_safe_url",
     "build_auth_url",
+    
+    # Exceptions
+    "AtprotoOauthError",
+    "IdentityResolutionError",
+    "DidDocumentError",
+    "MetadataError",
+    "OauthFlowError",
+    "SecurityError",
+    "InvalidParameterError",
 ]

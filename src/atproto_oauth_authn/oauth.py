@@ -5,11 +5,12 @@ import secrets
 import base64
 import hashlib
 import json
-from typing import Optional, Tuple
+from typing import Tuple
 
 import httpx
 
 from .security import is_safe_url
+from .exceptions import OauthFlowError, SecurityError, InvalidParameterError
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +47,14 @@ def generate_code_verifier(length: int = 128) -> str:
     
     Returns:
         A secure random string to use as the code_verifier parameter
+        
+    Raises:
+        InvalidParameterError: If the length is not between 43 and 128
     """
     if length < 43 or length > 128:
-        raise ValueError("Code verifier length must be between 43 and 128 characters")
+        error_msg = "Code verifier length must be between 43 and 128 characters"
+        logger.error(error_msg)
+        raise InvalidParameterError(error_msg)
 
     # Generate random bytes and convert to base64
     # Generate random bytes (3/4 of the desired length to account for base64 expansion)
@@ -91,11 +97,11 @@ def send_par_request(
     par_endpoint: str,
     code_challenge: str,
     state: str,
-    login_hint: Optional[str] = None,
-    client_id: Optional[str] = None,
-    redirect_uri: Optional[str] = None,
+    login_hint: str = None,
+    client_id: str = None,
+    redirect_uri: str = None,
     scope: str = "atproto transition:generic",
-) -> Tuple[Optional[str], Optional[int]]:
+) -> Tuple[str, int]:
     """
     Send a Pushed Authorization Request (PAR) to the authorization server.
     
@@ -109,11 +115,37 @@ def send_par_request(
         scope: The requested OAuth scopes
         
     Returns:
-        A tuple containing (request_uri, expires_in) if successful, (None, None) otherwise
+        A tuple containing (request_uri, expires_in)
+        
+    Raises:
+        OauthFlowError: If the PAR request fails
+        SecurityError: If there's a security issue with the URL
+        InvalidParameterError: If required parameters are missing
     """
     if not par_endpoint:
-        logger.error("Cannot send PAR request: PAR endpoint is None")
-        return None, None
+        error_msg = "Cannot send PAR request: PAR endpoint is None"
+        logger.error(error_msg)
+        raise InvalidParameterError(error_msg)
+        
+    if not code_challenge:
+        error_msg = "Cannot send PAR request: code_challenge is required"
+        logger.error(error_msg)
+        raise InvalidParameterError(error_msg)
+        
+    if not state:
+        error_msg = "Cannot send PAR request: state is required"
+        logger.error(error_msg)
+        raise InvalidParameterError(error_msg)
+        
+    if not client_id:
+        error_msg = "Cannot send PAR request: client_id is required"
+        logger.error(error_msg)
+        raise InvalidParameterError(error_msg)
+        
+    if not redirect_uri:
+        error_msg = "Cannot send PAR request: redirect_uri is required"
+        logger.error(error_msg)
+        raise InvalidParameterError(error_msg)
     
     # Prepare the request parameters
     params = {
@@ -134,9 +166,11 @@ def send_par_request(
     logger.debug(f"PAR request parameters: {params}")
     
     # Check URL for SSRF vulnerabilities
-    if not is_safe_url(par_endpoint):
-        logger.error(f"SSRF protection: Blocked request to potentially unsafe URL: {par_endpoint}")
-        return None, None
+    try:
+        is_safe_url(par_endpoint)
+    except SecurityError:
+        logger.error(f"Security check failed for URL: {par_endpoint}")
+        raise
 
     try:
         # Send the POST request with form-encoded body
@@ -159,23 +193,28 @@ def send_par_request(
             logger.info(f"Request URI expires in: {expires_in} seconds")
             return request_uri, expires_in
         else:
-            logger.error("No request_uri found in PAR response")
-            return None, None
+            error_msg = "No request_uri found in PAR response"
+            logger.error(error_msg)
+            raise OauthFlowError(error_msg)
             
     except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP error occurred during PAR request: {e}")
+        error_msg = f"HTTP error occurred during PAR request: {e}"
+        logger.error(error_msg)
         try:
             # Try to extract error details from response
             error_data = e.response.json()
             logger.error(f"Error details: {error_data}")
+            error_msg = f"{error_msg} - {error_data}"
         except json.JSONDecodeError:
             logger.error("Could not parse error response as JSON")
         except Exception as ex:
             logger.error(f"Error extracting details from error response: {ex}")
-        return None, None
+        raise OauthFlowError(error_msg)
     except httpx.RequestError as e:
-        logger.error(f"Request error occurred during PAR request: {e}")
-        return None, None
+        error_msg = f"Request error occurred during PAR request: {e}"
+        logger.error(error_msg)
+        raise OauthFlowError(error_msg)
     except json.JSONDecodeError:
-        logger.error("Failed to parse JSON response from PAR request")
-        return None, None
+        error_msg = "Failed to parse JSON response from PAR request"
+        logger.error(error_msg)
+        raise OauthFlowError(error_msg)
