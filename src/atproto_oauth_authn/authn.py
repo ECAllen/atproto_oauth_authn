@@ -8,6 +8,7 @@ import urllib.parse
 import ipaddress
 import atproto_oauth_authn
 
+# AI! please add logging debug info error warning were appropriate, pleae replace print statements with logging.debug
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -120,27 +121,28 @@ def authn_url(username: str, app_url: str) -> str:
         logging.error(f"Failed to send PAR request: {e}")
         raise
 
-    if request_uri:
-        print("PAR request successful!")
-        print(f"Request URI: {request_uri}")
-        print(f"Expires in: {expires_in} seconds")
+    print("PAR request successful!")
+    print(f"Request URI: {request_uri}")
+    print(f"Expires in: {expires_in} seconds")
 
-        # auth_url = authserver_meta["authorization_endpoint"]
-        # assert is_safe_url(auth_url)
-        qparam = urllib.parse.urlencode(
-            {"client_id": client_id, "request_uri": request_uri}
-        )
-        auth_url = f"{auth_endpoint}?{qparam}"
+    # auth_url = authserver_meta["authorization_endpoint"]
+    qparam = urllib.parse.urlencode(
+        {"client_id": client_id, "request_uri": request_uri}
+    )
+    auth_url = f"{auth_endpoint}?{qparam}"
+    assert atproto_oauth_authn.security.is_safe_url(auth_url)
 
-        # Construct the authorization URL
+    # Construct the authorization URL
 
-        # client_id_enc = urllib.parse.quote(client_id, safe="")
-        # request_uri_enc = urllib.parse.quote(request_uri, safe="")
-        # auth_url = f"{auth_endpoint}?client_id={client_id_enc}&request_uri={request_uri_enc}"
-        #
-        print("\nAuthorization URL:")
-        print(f"{auth_endpoint}?client_id={client_id}&request_uri={request_uri}")
-        print(auth_url)
+    # client_id_enc = urllib.parse.quote(client_id, safe="")
+    # request_uri_enc = urllib.parse.quote(request_uri, safe="")
+    # auth_url = f"{auth_endpoint}?client_id={client_id_enc}&request_uri={request_uri_enc}"
+
+    print("\nAuthorization URL:")
+    print(f"{auth_endpoint}?client_id={client_id}&request_uri={request_uri}")
+    print(auth_url)
+
+    return auth_url
 
 
 # DOMAIN_RE = re.compile(
