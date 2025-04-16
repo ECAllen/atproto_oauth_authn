@@ -60,10 +60,13 @@ def authn_url(username: str) -> str:
     logging.debug(f"Authorization server URL: {auth_servers[0]}")
 
     # 7) get the metadata of the authorization server
-    # AI! wrap this in a try/except block
-    auth_metadata, auth_endpoint, token_endpoint, par_endpoint = (
-        atproto_oauth_authn.get_auth_server_metadata(auth_servers)
-    )
+    try:
+        auth_metadata, auth_endpoint, token_endpoint, par_endpoint = (
+            atproto_oauth_authn.get_auth_server_metadata(auth_servers)
+        )
+    except Exception as e:
+        logging.error(f"Failed to retrieve auth server metadata: {e}")
+        raise
 
     # if not auth_metadata:
     #     logging.error("Failed to retrieve auth server metadata from any server")
