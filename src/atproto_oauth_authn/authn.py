@@ -94,9 +94,12 @@ def authn_url(username: str) -> str:
     logging.debug(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
 
     # Generate a code_challenge from the code_verifier
-    # AI! please wrap this in a try/except block
-    code_challenge = atproto_oauth_authn.generate_code_challenge(code_verifier)
-    print(f"Generated code_challenge: {code_challenge[:10]}... (truncated)")
+    try:
+        code_challenge = atproto_oauth_authn.generate_code_challenge(code_verifier)
+        print(f"Generated code_challenge: {code_challenge[:10]}... (truncated)")
+    except Exception as e:
+        logging.error(f"Failed to generate code challenge: {e}")
+        raise
 
     # # In a real application, you would store these values
     # # to use them when exchanging the authorization code for tokens
