@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def authn_url(username: str) -> str | None:
+def authn_url(username: str) -> str:
     # 2)@ retrieve the users DID
     try:
         user_did = atproto_oauth_authn.resolve_identity(username)
@@ -29,8 +29,8 @@ def authn_url(username: str) -> str | None:
 
     logging.info(f"Resolved username {username} to DID: {user_did}")
 
-    # # 3) retrieve the user DID document
-    # # 4) get the URL of the PDS server from the DID doc
+    # 3) retrieve the user DID document
+    # 4) get the URL of the PDS server from the DID doc
     try:
         did_document, pds_url = atproto_oauth_authn.get_did_document(user_did)
         if not did_document or not pds_url:
@@ -38,7 +38,7 @@ def authn_url(username: str) -> str | None:
             return False
     except Exception as e:
         logging.error(f"Failed to retrieve DID document for {user_did}: {e}")
-        return False
+        raise
 
     # logging.info(f"Successfully retrieved DID document for {user_did}")
 
