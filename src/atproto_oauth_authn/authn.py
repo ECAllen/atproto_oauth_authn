@@ -51,11 +51,14 @@ def authn_url(username: str) -> str:
         raise
 
     # 6) from the metadata extract the authorization server
-    # AI! wraop this in  a try catch block
-    auth_servers = atproto_oauth_authn.extract_auth_server(pds_metadata)
-    if not auth_servers:
-        logging.error("Failed to extract authorization server from metadata")
-        return False
+    try:
+        auth_servers = atproto_oauth_authn.extract_auth_server(pds_metadata)
+        if not auth_servers:
+            logging.error("Failed to extract authorization server from metadata")
+            return False
+    except Exception as e:
+        logging.error(f"Failed to extract authorization server from metadata: {e}")
+        raise
 
     # logging.info(f"Authorization server URL: {auth_servers[0]}")
 
