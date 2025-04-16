@@ -46,20 +46,16 @@ def authn_url(username: str) -> str:
     # 5) get the PDS server metadata from the well-known endpoint
     try:
         pds_metadata = atproto_oauth_authn.get_pds_metadata(pds_url)
-        if not pds_metadata:
-            logging.error("Failed to retrieve PDS metadata")
-            return False
     except Exception as e:
         logging.error(f"Failed to retrieve PDS metadata: {e}")
         raise
 
-    # logging.info("PDS metadata retrieved successfully")
-
-    # # 6) from the metadata extract the authorization server
-    # auth_servers = atproto_oauth_authn.extract_auth_server(pds_metadata)
-    # if not auth_servers:
-    #     logging.error("Failed to extract authorization server from metadata")
-    #     return False
+    # 6) from the metadata extract the authorization server
+    # AI! wraop this in  a try catch block
+    auth_servers = atproto_oauth_authn.extract_auth_server(pds_metadata)
+    if not auth_servers:
+        logging.error("Failed to extract authorization server from metadata")
+        return False
 
     # logging.info(f"Authorization server URL: {auth_servers[0]}")
 
