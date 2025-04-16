@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def authn_url(username: str) -> str:
+def authn_url(username: str, app_url: str) -> str:
     # 2)@ retrieve the users DID
     try:
         user_did = atproto_oauth_authn.resolve_identity(username)
@@ -96,66 +96,50 @@ def authn_url(username: str) -> str:
     # Generate a code_challenge from the code_verifier
     try:
         code_challenge = atproto_oauth_authn.generate_code_challenge(code_verifier)
-        print(f"Generated code_challenge: {code_challenge[:10]}... (truncated)")
     except Exception as e:
         logging.error(f"Failed to generate code challenge: {e}")
         raise
 
-    # # In a real application, you would store these values
-    # # to use them when exchanging the authorization code for tokens
+    logging.debug(f"Generated code_challenge: {code_challenge[:10]}... (truncated)")
 
-    # # Send the PAR request if we have a PAR endpoint
-    # if par_endpoint:
-    #     client_id = f"https://{app_url}/oauth/client-metadata.json"
-    #     redirect_uri = f"https://{app_url}/oauth/callback"
-    #     # Use the username as login_hint if available
-    #     request_uri, expires_in = atproto_oauth_authn.send_par_request(
-    #         par_endpoint=par_endpoint,
-    #         code_challenge=code_challenge,
-    #         state=oauth_state,
-    #         login_hint=username,
-    #         client_id=client_id,
-    #         redirect_uri=redirect_uri,
-    #     )
+    # Send the PAR request if we have a PAR endpoint
+    client_id = f"https://{app_url}/oauth/client-metadata.json"
+    redirect_uri = f"https://{app_url}/oauth/callback"
 
-    #     if request_uri:
-    #         print("PAR request successful!")
-    #         print(f"Request URI: {request_uri}")
-    #         print(f"Expires in: {expires_in} seconds")
+    # Use the username as login_hint if available
+    # AI! please wrap this in a try/except block
+    request_uri, expires_in = atproto_oauth_authn.send_par_request(
+        par_endpoint=par_endpoint,
+        code_challenge=code_challenge,
+        state=oauth_state,
+        login_hint=username,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+    )
 
-    #         import urllib.parse  # noqa: E402
+    if request_uri:
+        print("PAR request successful!")
+        print(f"Request URI: {request_uri}")
+        print(f"Expires in: {expires_in} seconds")
 
-    #         # auth_url = authserver_meta["authorization_endpoint"]
-    #         # assert is_safe_url(auth_url)
-    #         qparam = urllib.parse.urlencode(
-    #             {"client_id": client_id, "request_uri": request_uri}
-    #         )
-    #         auth_url = f"{auth_endpoint}?{qparam}"
+        # auth_url = authserver_meta["authorization_endpoint"]
+        # assert is_safe_url(auth_url)
+        qparam = urllib.parse.urlencode(
+            {"client_id": client_id, "request_uri": request_uri}
+        )
+        auth_url = f"{auth_endpoint}?{qparam}"
 
-    #         # Construct the authorization URL
+        # Construct the authorization URL
 
-    #         # client_id_enc = urllib.parse.quote(client_id, safe="")
-    #         # request_uri_enc = urllib.parse.quote(request_uri, safe="")
-    #         # auth_url = f"{auth_endpoint}?client_id={client_id_enc}&request_uri={request_uri_enc}"
-    #         #
-    #         print("\nAuthorization URL:")
-    #         print(f"{auth_endpoint}?client_id={client_id}&request_uri={request_uri}")
-    #         print(auth_url)
-    #         import webbrowser
-
-    #         webbrowser.open(auth_url)
-    #         return True
-    #     else:
-    #         print("PAR request failed. Check the logs for details.")
-    #         return False
-    # else:
-    #     logging.warning("No PAR endpoint available, cannot proceed with OAuth flow")
-    #     return False
+        # client_id_enc = urllib.parse.quote(client_id, safe="")
+        # request_uri_enc = urllib.parse.quote(request_uri, safe="")
+        # auth_url = f"{auth_endpoint}?client_id={client_id_enc}&request_uri={request_uri_enc}"
+        #
+        print("\nAuthorization URL:")
+        print(f"{auth_endpoint}?client_id={client_id}&request_uri={request_uri}")
+        print(auth_url)
 
 
-if __name__ == "__main__":
-    # No main function defined in this module
-    pass
 # DOMAIN_RE = re.compile(
 #     r"^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z][a-zA-Z0-9-]*[a-zA-Z]$"
 # )
