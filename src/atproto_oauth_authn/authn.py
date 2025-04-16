@@ -135,7 +135,8 @@ def authn_url(username: str) -> str | None:
 
 
 if __name__ == "__main__":
-    main()
+    # No main function defined in this module
+    pass
 # DOMAIN_RE = re.compile(
 #     r"^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z][a-zA-Z0-9-]*[a-zA-Z]$"
 # )
