@@ -107,15 +107,18 @@ def authn_url(username: str, app_url: str) -> str:
     redirect_uri = f"https://{app_url}/oauth/callback"
 
     # Use the username as login_hint if available
-    # AI! please wrap this in a try/except block
-    request_uri, expires_in = atproto_oauth_authn.send_par_request(
-        par_endpoint=par_endpoint,
-        code_challenge=code_challenge,
-        state=oauth_state,
-        login_hint=username,
-        client_id=client_id,
-        redirect_uri=redirect_uri,
-    )
+    try:
+        request_uri, expires_in = atproto_oauth_authn.send_par_request(
+            par_endpoint=par_endpoint,
+            code_challenge=code_challenge,
+            state=oauth_state,
+            login_hint=username,
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+        )
+    except Exception as e:
+        logging.error(f"Failed to send PAR request: {e}")
+        raise
 
     if request_uri:
         print("PAR request successful!")
