@@ -44,11 +44,14 @@ def authn_url(username: str) -> str:
         raise
 
     # 5) get the PDS server metadata from the well-known endpoint
-    # AI! please wrap this in a try/except block
-    pds_metadata = atproto_oauth_authn.get_pds_metadata(pds_url)
-    if not pds_metadata:
-        logging.error("Failed to retrieve PDS metadata")
-        return False
+    try:
+        pds_metadata = atproto_oauth_authn.get_pds_metadata(pds_url)
+        if not pds_metadata:
+            logging.error("Failed to retrieve PDS metadata")
+            return False
+    except Exception as e:
+        logging.error(f"Failed to retrieve PDS metadata: {e}")
+        raise
 
     # logging.info("PDS metadata retrieved successfully")
 
