@@ -87,12 +87,14 @@ def authn_url(username: str) -> str:
     # TODO very param for code_verifier length
     try:
         code_verifier = atproto_oauth_authn.generate_code_verifier(48)
-        print(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
     except Exception as e:
         logging.error(f"Failed to generate code verifier: {e}")
         raise
 
+    logging.debug(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
+
     # Generate a code_challenge from the code_verifier
+    # AI! please wrap this in a try/except block
     code_challenge = atproto_oauth_authn.generate_code_challenge(code_verifier)
     print(f"Generated code_challenge: {code_challenge[:10]}... (truncated)")
 
