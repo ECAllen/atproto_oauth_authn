@@ -68,12 +68,11 @@ def authn_url(username: str) -> str:
         logging.error(f"Failed to retrieve auth server metadata: {e}")
         raise
 
-    # AI! replace the print statements with logging.debug
     logging.debug("Auth server metadata retrieved successfully")
     logging.debug("Auth Server Endpoints:")
-    print(f"  Authorization: {auth_endpoint}")
-    print(f"  Token: {token_endpoint}")
-    print(f"  PAR: {par_endpoint or 'Not available'}")
+    logging.debug(f"  Authorization: {auth_endpoint}")
+    logging.debug(f"  Token: {token_endpoint}")
+    logging.debug(f"  PAR: {par_endpoint or 'Not available'}")
 
     # Generate a state parameter for OAuth request
     oauth_state = atproto_oauth_authn.generate_oauth_state()
