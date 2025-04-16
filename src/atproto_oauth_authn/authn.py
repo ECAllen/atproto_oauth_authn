@@ -25,8 +25,7 @@ def authn_url(username: str) -> str | None:
         user_did = atproto_oauth_authn.resolve_identity(username)
     except Exception as e:
         logging.error(f"Failed to resolve username {username} to a DID: {e}")
-        # AI! should this return None? or raise an exception?
-        return None
+        raise
 
     logging.info(f"Resolved username {username} to DID: {user_did}")
 
