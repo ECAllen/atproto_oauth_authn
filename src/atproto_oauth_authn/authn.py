@@ -8,7 +8,6 @@ import urllib.parse
 import ipaddress
 import atproto_oauth_authn
 
-# AI! please add logging debug info error warning were appropriate, pleae replace print statements with logging.debug
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -82,7 +81,7 @@ def authn_url(username: str, app_url: str) -> str:
         logging.error(f"Failed to generate the oauth request: {e}")
         raise
 
-    print(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
+    logging.debug(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
 
     # Generate a code_verifier for PKCE
     # TODO very param for code_verifier length
@@ -121,9 +120,9 @@ def authn_url(username: str, app_url: str) -> str:
         logging.error(f"Failed to send PAR request: {e}")
         raise
 
-    print("PAR request successful!")
-    print(f"Request URI: {request_uri}")
-    print(f"Expires in: {expires_in} seconds")
+    logging.debug("PAR request successful!")
+    logging.debug(f"Request URI: {request_uri}")
+    logging.debug(f"Expires in: {expires_in} seconds")
 
     # auth_url = authserver_meta["authorization_endpoint"]
     qparam = urllib.parse.urlencode(
@@ -138,9 +137,9 @@ def authn_url(username: str, app_url: str) -> str:
     # request_uri_enc = urllib.parse.quote(request_uri, safe="")
     # auth_url = f"{auth_endpoint}?client_id={client_id_enc}&request_uri={request_uri_enc}"
 
-    print("\nAuthorization URL:")
-    print(f"{auth_endpoint}?client_id={client_id}&request_uri={request_uri}")
-    print(auth_url)
+    logging.debug("\nAuthorization URL:")
+    logging.debug(f"{auth_endpoint}?client_id={client_id}&request_uri={request_uri}")
+    logging.debug(auth_url)
 
     return auth_url
 
