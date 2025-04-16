@@ -15,7 +15,7 @@ __version__ = "0.1.0"
 
 # Public API exports
 from .identity import resolve_identity
-from .did import get_did_document
+from .did import get_did_document, retrieve_did_document, extract_pds_url
 from .metadata import (
     get_pds_metadata,
     extract_auth_server,
@@ -43,6 +43,8 @@ __all__ = [
     # Core functionality
     "resolve_identity",
     "get_did_document",
+    "retrieve_did_document",
+    "extract_pds_url",
     "get_pds_metadata",
     "extract_auth_server",
     "get_auth_server_metadata",

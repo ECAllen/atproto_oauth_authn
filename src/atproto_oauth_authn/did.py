@@ -12,8 +12,7 @@ from .exceptions import DidDocumentError, SecurityError
 logger = logging.getLogger(__name__)
 
 
-# AI! this should be split into two functions, one to retrieve the DID document and another to extradt the PDS URL
-def get_did_document(did: str) -> Tuple[Dict[str, Any], str]:
+def retrieve_did_document(did: str) -> Dict[str, Any]:
     """
     Retrieve the DID document for a given DID.
 
@@ -21,7 +20,7 @@ def get_did_document(did: str) -> Tuple[Dict[str, Any], str]:
         did: The DID to retrieve the document for
 
     Returns:
-        A tuple containing the DID document as a dictionary and the PDS URL
+        The DID document as a dictionary
 
     Raises:
         DidDocumentError: If the DID document cannot be retrieved or parsed
@@ -47,17 +46,7 @@ def get_did_document(did: str) -> Tuple[Dict[str, Any], str]:
         # Parse the JSON response
         did_document = response.json()
         logger.info(f"Retrieved DID document for {did}")
-
-        # Extract the PDS URL from the DID document
-        if "service" in did_document and len(did_document["service"]) > 0:
-            pds_url = did_document["service"][0].get("serviceEndpoint")
-            if pds_url:
-                logger.info(f"User's PDS URL: {pds_url}")
-                return did_document, pds_url
-
-        error_msg = f"Could not find PDS URL in DID document for {did}"
-        logger.warning(error_msg)
-        raise DidDocumentError(error_msg)
+        return did_document
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
             error_msg = f"DID not found: {did}"
@@ -79,3 +68,50 @@ def get_did_document(did: str) -> Tuple[Dict[str, Any], str]:
         error_msg = f"Failed to parse JSON response from DID document retrieval"
         logger.error(error_msg)
         raise DidDocumentError(error_msg)
+
+
+def extract_pds_url(did_document: Dict[str, Any]) -> str:
+    """
+    Extract the PDS URL from a DID document.
+
+    Args:
+        did_document: The DID document dictionary
+
+    Returns:
+        The PDS URL as a string
+
+    Raises:
+        DidDocumentError: If the PDS URL cannot be found in the document
+    """
+    if not did_document:
+        raise DidDocumentError("DID document cannot be empty")
+
+    # Extract the PDS URL from the DID document
+    if "service" in did_document and len(did_document["service"]) > 0:
+        pds_url = did_document["service"][0].get("serviceEndpoint")
+        if pds_url:
+            logger.info(f"Extracted PDS URL: {pds_url}")
+            return pds_url
+
+    error_msg = "Could not find PDS URL in DID document"
+    logger.warning(error_msg)
+    raise DidDocumentError(error_msg)
+
+
+def get_did_document(did: str) -> Tuple[Dict[str, Any], str]:
+    """
+    Retrieve the DID document for a given DID and extract the PDS URL.
+
+    Args:
+        did: The DID to retrieve the document for
+
+    Returns:
+        A tuple containing the DID document as a dictionary and the PDS URL
+
+    Raises:
+        DidDocumentError: If the DID document cannot be retrieved or parsed
+        SecurityError: If there's a security issue with the URL
+    """
+    did_document = retrieve_did_document(did)
+    pds_url = extract_pds_url(did_document)
+    return did_document, pds_url
