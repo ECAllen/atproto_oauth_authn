@@ -20,11 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 def authn_url(username: str) -> str | None:
-    # 2) retrieve the users DID
+    # 2)@ retrieve the users DID
     try:
         user_did = atproto_oauth_authn.resolve_identity(username)
     except Exception as e:
         logging.error(f"Failed to resolve username {username} to a DID: {e}")
+        # AI! should this return None? or raise an exception?
         return None
 
     logging.info(f"Resolved username {username} to DID: {user_did}")
