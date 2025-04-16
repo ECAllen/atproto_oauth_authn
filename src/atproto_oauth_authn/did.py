@@ -11,25 +11,27 @@ from .exceptions import DidDocumentError, SecurityError
 
 logger = logging.getLogger(__name__)
 
+
+# AI! this should be split into two functions, one to retrieve the DID document and another to extradt the PDS URL
 def get_did_document(did: str) -> Tuple[Dict[str, Any], str]:
     """
     Retrieve the DID document for a given DID.
-    
+
     Args:
         did: The DID to retrieve the document for
-        
+
     Returns:
         A tuple containing the DID document as a dictionary and the PDS URL
-        
+
     Raises:
         DidDocumentError: If the DID document cannot be retrieved or parsed
         SecurityError: If there's a security issue with the URL
     """
     if not did:
         raise DidDocumentError("DID cannot be empty")
-        
+
     url = f"https://plc.directory/{did}"
-    
+
     # Check URL for SSRF vulnerabilities
     try:
         is_safe_url(url)
@@ -41,18 +43,18 @@ def get_did_document(did: str) -> Tuple[Dict[str, Any], str]:
         # Make HTTP request to retrieve the DID document
         response = httpx.get(url)
         response.raise_for_status()
-        
+
         # Parse the JSON response
         did_document = response.json()
         logger.info(f"Retrieved DID document for {did}")
-        
+
         # Extract the PDS URL from the DID document
-        if 'service' in did_document and len(did_document['service']) > 0:
-            pds_url = did_document['service'][0].get('serviceEndpoint')
+        if "service" in did_document and len(did_document["service"]) > 0:
+            pds_url = did_document["service"][0].get("serviceEndpoint")
             if pds_url:
                 logger.info(f"User's PDS URL: {pds_url}")
                 return did_document, pds_url
-        
+
         error_msg = f"Could not find PDS URL in DID document for {did}"
         logger.warning(error_msg)
         raise DidDocumentError(error_msg)
