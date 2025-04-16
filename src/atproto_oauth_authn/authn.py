@@ -68,28 +68,25 @@ def authn_url(username: str) -> str:
         logging.error(f"Failed to retrieve auth server metadata: {e}")
         raise
 
-    # if not auth_metadata:
-    #     logging.error("Failed to retrieve auth server metadata from any server")
-    #     return False
+    # AI! replace the print statements with logging.debug
+    logging.debug("Auth server metadata retrieved successfully")
+    logging.debug("Auth Server Endpoints:")
+    print(f"  Authorization: {auth_endpoint}")
+    print(f"  Token: {token_endpoint}")
+    print(f"  PAR: {par_endpoint or 'Not available'}")
 
-    # logging.info("Auth server metadata retrieved successfully")
-    # print("Auth Server Endpoints:")
-    # print(f"  Authorization: {auth_endpoint}")
-    # print(f"  Token: {token_endpoint}")
-    # print(f"  PAR: {par_endpoint or 'Not available'}")
+    # Generate a state parameter for OAuth request
+    oauth_state = atproto_oauth_authn.generate_oauth_state()
+    print(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
 
-    # # Generate a state parameter for OAuth request
-    # oauth_state = atproto_oauth_authn.generate_oauth_state()
-    # print(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
+    # Generate a code_verifier for PKCE
+    # TODO very param for code_verifier length
+    code_verifier = atproto_oauth_authn.generate_code_verifier(48)
+    print(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
 
-    # # Generate a code_verifier for PKCE
-    # # TODO very param for code_verifier length
-    # code_verifier = atproto_oauth_authn.generate_code_verifier(48)
-    # print(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
-
-    # # Generate a code_challenge from the code_verifier
-    # code_challenge = atproto_oauth_authn.generate_code_challenge(code_verifier)
-    # print(f"Generated code_challenge: {code_challenge[:10]}... (truncated)")
+    # Generate a code_challenge from the code_verifier
+    code_challenge = atproto_oauth_authn.generate_code_challenge(code_verifier)
+    print(f"Generated code_challenge: {code_challenge[:10]}... (truncated)")
 
     # # In a real application, you would store these values
     # # to use them when exchanging the authorization code for tokens
