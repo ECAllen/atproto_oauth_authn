@@ -31,10 +31,13 @@ def authn_url(username: str) -> str | None:
 
     # # 3) retrieve the user DID document
     # # 4) get the URL of the PDS server from the DID doc
-    # AI! pleas wrap in try/except
-    did_document, pds_url = atproto_oauth_authn.get_did_document(user_did)
-    if not did_document or not pds_url:
-        logging.error(f"Failed to retrieve DID document or PDS URL for {user_did}")
+    try:
+        did_document, pds_url = atproto_oauth_authn.get_did_document(user_did)
+        if not did_document or not pds_url:
+            logging.error(f"Failed to retrieve DID document or PDS URL for {user_did}")
+            return False
+    except Exception as e:
+        logging.error(f"Failed to retrieve DID document for {user_did}: {e}")
         return False
 
     # logging.info(f"Successfully retrieved DID document for {user_did}")
