@@ -75,11 +75,17 @@ def authn_url(username: str) -> str:
     logging.debug(f"  PAR: {par_endpoint or 'Not available'}")
 
     # Generate a state parameter for OAuth request
-    oauth_state = atproto_oauth_authn.generate_oauth_state()
+    try:
+        oauth_state = atproto_oauth_authn.generate_oauth_state()
+    except Exception as e:
+        logging.error(f"Failed to generate the oauth request: {e}")
+        raise
+
     print(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
 
     # Generate a code_verifier for PKCE
     # TODO very param for code_verifier length
+    # AI! wrap in try except block
     code_verifier = atproto_oauth_authn.generate_code_verifier(48)
     print(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
 
