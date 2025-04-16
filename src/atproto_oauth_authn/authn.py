@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 
 def authn_url(username: str) -> str | None:
     # 2) retrieve the users DID
-    # AI! please try except here
-    user_did = atproto_oauth_authn.resolve_identity(username)
-    if not user_did:
-        logging.error(f"Failed to resolve username {username} to a DID")
+    try:
+        user_did = atproto_oauth_authn.resolve_identity(username)
+    except Exception as e:
+        logging.error(f"Failed to resolve username {username} to a DID: {e}")
         return None
 
     logging.info(f"Resolved username {username} to DID: {user_did}")
