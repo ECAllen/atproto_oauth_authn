@@ -5,8 +5,6 @@ logging.getLogger(__name__).addHandler(logging.NullHandler())
 __version__ = "0.1.0"
 """AT Protocol OAuth authentication client."""
 
-import logging
-
 # Set up null handler to prevent "No handler found" warnings
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
@@ -38,6 +36,7 @@ from .exceptions import (
     SecurityError,
     InvalidParameterError,
 )
+from .authn import get_authn_url
 
 __all__ = [
     # Core functionality
@@ -54,7 +53,7 @@ __all__ = [
     "send_par_request",
     "is_safe_url",
     "build_auth_url",
-    
+    "get_authn_url",
     # Exceptions
     "AtprotoOauthError",
     "IdentityResolutionError",

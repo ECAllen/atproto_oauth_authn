@@ -1,11 +1,5 @@
-import json
-import re
-import httpx
 import logging
-import secrets
-import base64
 import urllib.parse
-import ipaddress
 import atproto_oauth_authn
 
 logging.basicConfig(
@@ -19,8 +13,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def authn_url(username: str, app_url: str) -> str:
-    # 2)@ retrieve the users DID
+def get_authn_url(username: str, app_url: str) -> str:
+    # 2) retrieve the users DID
     try:
         user_did = atproto_oauth_authn.resolve_identity(username)
     except Exception as e:
@@ -73,6 +67,7 @@ def authn_url(username: str, app_url: str) -> str:
     logging.debug(f"  Authorization: {auth_endpoint}")
     logging.debug(f"  Token: {token_endpoint}")
     logging.debug(f"  PAR: {par_endpoint or 'Not available'}")
+    logging.debug(f"  metadata: {auth_metadata or 'Not available'}")
 
     # Generate a state parameter for OAuth request
     try:
@@ -124,18 +119,11 @@ def authn_url(username: str, app_url: str) -> str:
     logging.debug(f"Request URI: {request_uri}")
     logging.debug(f"Expires in: {expires_in} seconds")
 
-    # auth_url = authserver_meta["authorization_endpoint"]
     qparam = urllib.parse.urlencode(
         {"client_id": client_id, "request_uri": request_uri}
     )
     auth_url = f"{auth_endpoint}?{qparam}"
     assert atproto_oauth_authn.security.is_safe_url(auth_url)
-
-    # Construct the authorization URL
-
-    # client_id_enc = urllib.parse.quote(client_id, safe="")
-    # request_uri_enc = urllib.parse.quote(request_uri, safe="")
-    # auth_url = f"{auth_endpoint}?client_id={client_id_enc}&request_uri={request_uri_enc}"
 
     logging.debug("\nAuthorization URL:")
     logging.debug(f"{auth_endpoint}?client_id={client_id}&request_uri={request_uri}")
