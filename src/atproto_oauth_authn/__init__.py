@@ -1,16 +1,3 @@
-import logging
-
-logging.getLogger(__name__).addHandler(logging.NullHandler())
-
-__version__ = "0.1.0"
-"""AT Protocol OAuth authentication client."""
-
-# Set up null handler to prevent "No handler found" warnings
-logging.getLogger(__name__).addHandler(logging.NullHandler())
-
-# Version information
-__version__ = "0.1.0"
-
 # Public API exports
 from .identity import resolve_identity
 from .did import get_did_document, retrieve_did_document, extract_pds_url
@@ -37,6 +24,20 @@ from .exceptions import (
     InvalidParameterError,
 )
 from .authn import get_authn_url
+
+import logging
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
+__version__ = "0.1.0"
+"""AT Protocol OAuth authentication client."""
+
+# Set up null handler to prevent "No handler found" warnings
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
+# Version information
+__version__ = "0.1.0"
+
 
 __all__ = [
     # Core functionality

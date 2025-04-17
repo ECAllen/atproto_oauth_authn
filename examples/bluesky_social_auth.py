@@ -3,7 +3,6 @@ import logging
 import os
 import sys
 import webbrowser
-import urllib.parse
 import atproto_oauth_authn
 
 

@@ -65,7 +65,7 @@ def retrieve_did_document(did: str) -> Dict[str, Any]:
         logger.error(error_msg)
         raise DidDocumentError(error_msg)
     except json.JSONDecodeError:
-        error_msg = f"Failed to parse JSON response from DID document retrieval"
+        error_msg = "Failed to parse JSON response from DID document retrieval"
         logger.error(error_msg)
         raise DidDocumentError(error_msg)
 

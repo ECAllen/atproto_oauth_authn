@@ -14,15 +14,16 @@ from .exceptions import OauthFlowError, SecurityError, InvalidParameterError
 
 logger = logging.getLogger(__name__)
 
+
 def generate_oauth_state() -> str:
     """
     Generate a secure random state value for OAuth requests.
-    
+
     The state value is a random string that is:
     - Unpredictable and unique for each authorization request
     - At least 32 bytes (converted to a hex string)
     - Used as a CSRF protection mechanism
-    
+
     Returns:
         A secure random string to use as the state parameter
     """
@@ -32,22 +33,23 @@ def generate_oauth_state() -> str:
     logger.info(f"Generated OAuth state parameter ({len(state)} characters)")
     return state
 
+
 def generate_code_verifier(length: int = 128) -> str:
     """
     Generate a code_verifier for PKCE (Proof Key for Code Exchange) in OAuth.
-    
+
     The code_verifier is:
     - A cryptographically random string between 43 and 128 characters
     - Contains only unreserved URL characters: A-Z, a-z, 0-9, hyphen (-),
       period (.), underscore (_), and tilde (~)
-    
+
     Args:
         length: Length of the code verifier (default: 128)
                Must be between 43 and 128 characters
-    
+
     Returns:
         A secure random string to use as the code_verifier parameter
-        
+
     Raises:
         InvalidParameterError: If the length is not between 43 and 128
     """
@@ -69,17 +71,18 @@ def generate_code_verifier(length: int = 128) -> str:
     logger.info(f"Generated code_verifier ({len(code_verifier)} characters)")
     return code_verifier
 
+
 def generate_code_challenge(code_verifier: str) -> str:
     """
     Generate a code_challenge from a code_verifier for PKCE in OAuth.
-    
+
     The code_challenge is:
     - The SHA-256 hash of the code_verifier
     - Base64URL-encoded
-    
+
     Args:
         code_verifier: The code_verifier string
-        
+
     Returns:
         The code_challenge string
     """
@@ -93,6 +96,7 @@ def generate_code_challenge(code_verifier: str) -> str:
     logger.info(f"Generated code_challenge ({len(code_challenge)} characters)")
     return code_challenge
 
+
 def send_par_request(
     par_endpoint: str,
     code_challenge: str,
@@ -104,7 +108,7 @@ def send_par_request(
 ) -> Tuple[str, int]:
     """
     Send a Pushed Authorization Request (PAR) to the authorization server.
-    
+
     Args:
         par_endpoint: The PAR endpoint URL from the authorization server metadata
         code_challenge: The PKCE code challenge generated from the code verifier
@@ -113,10 +117,10 @@ def send_par_request(
         client_id: The OAuth client ID (URL to client metadata)
         redirect_uri: The callback URL where the authorization code will be sent
         scope: The requested OAuth scopes
-        
+
     Returns:
         A tuple containing (request_uri, expires_in)
-        
+
     Raises:
         OauthFlowError: If the PAR request fails
         SecurityError: If there's a security issue with the URL
@@ -126,27 +130,27 @@ def send_par_request(
         error_msg = "Cannot send PAR request: PAR endpoint is None"
         logger.error(error_msg)
         raise InvalidParameterError(error_msg)
-        
+
     if not code_challenge:
         error_msg = "Cannot send PAR request: code_challenge is required"
         logger.error(error_msg)
         raise InvalidParameterError(error_msg)
-        
+
     if not state:
         error_msg = "Cannot send PAR request: state is required"
         logger.error(error_msg)
         raise InvalidParameterError(error_msg)
-        
+
     if not client_id:
         error_msg = "Cannot send PAR request: client_id is required"
         logger.error(error_msg)
         raise InvalidParameterError(error_msg)
-        
+
     if not redirect_uri:
         error_msg = "Cannot send PAR request: redirect_uri is required"
         logger.error(error_msg)
         raise InvalidParameterError(error_msg)
-    
+
     # Prepare the request parameters
     params = {
         "response_type": "code",
@@ -157,14 +161,14 @@ def send_par_request(
         "code_challenge": code_challenge,
         "state": state,
     }
-    
+
     # Add login_hint if provided
     if login_hint:
         params["login_hint"] = login_hint
-    
+
     logger.info(f"Sending PAR request to: {par_endpoint}")
     logger.debug(f"PAR request parameters: {params}")
-    
+
     # Check URL for SSRF vulnerabilities
     try:
         is_safe_url(par_endpoint)
@@ -179,15 +183,15 @@ def send_par_request(
             data=params,
         )
         response.raise_for_status()
-        
+
         # Parse the JSON response
         data = response.json()
         logger.info("PAR request successful")
-        
+
         # Extract the request_uri and expires_in values
         request_uri = data.get("request_uri")
         expires_in = data.get("expires_in")
-        
+
         if request_uri:
             logger.info(f"Received request_uri: {request_uri}")
             logger.info(f"Request URI expires in: {expires_in} seconds")
@@ -196,7 +200,7 @@ def send_par_request(
             error_msg = "No request_uri found in PAR response"
             logger.error(error_msg)
             raise OauthFlowError(error_msg)
-            
+
     except httpx.HTTPStatusError as e:
         error_msg = f"HTTP error occurred during PAR request: {e}"
         logger.error(error_msg)

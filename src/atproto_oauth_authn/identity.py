@@ -3,7 +3,6 @@
 import logging
 import re
 import json
-from typing import Optional
 
 import httpx
 
@@ -16,23 +15,24 @@ logger = logging.getLogger(__name__)
 HANDLE_REGEX = r"^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$"
 DID_RE = r"^did:[a-z]+:[a-zA-Z0-9.%-]+$"
 
+
 def resolve_identity(username: str) -> str:
     """
     Resolve a username (handle or DID) to a DID.
-    
+
     Args:
         username: A string that could be a handle or DID
-        
+
     Returns:
         The DID if resolution is successful
-        
+
     Raises:
         IdentityResolutionError: If the username cannot be resolved to a DID
         SecurityError: If there's a security issue with the URL
     """
     if not username:
         raise IdentityResolutionError("Username cannot be empty")
-        
+
     if re.match(HANDLE_REGEX, username):
         # Handle the case where username is a handle
         logger.debug(f"Username is a handle: {username}")
@@ -52,7 +52,7 @@ def resolve_identity(username: str) -> str:
         # Check URL for SSRF vulnerabilities
         try:
             is_safe_url(url)
-        except SecurityError as e:
+        except SecurityError:
             logger.error(f"Security check failed for URL: {url}")
             raise
 
@@ -70,7 +70,9 @@ def resolve_identity(username: str) -> str:
                 logger.debug(f"Resolved handle {username} to DID: {did}")
                 return did
             else:
-                error_msg = f"Failed to resolve handle: {username}. No DID found in response"
+                error_msg = (
+                    f"Failed to resolve handle: {username}. No DID found in response"
+                )
                 logger.info(error_msg)
                 raise IdentityResolutionError(error_msg)
         except httpx.HTTPStatusError as e:
