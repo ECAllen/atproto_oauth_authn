@@ -60,12 +60,14 @@ See the `examples/bluesky_social_auth.py` file for a complete example of the aut
 To run the example:
 
 1. Create a `.env` file with:
+
 ```
 USERNAME=your.handle.bsky.social
 APP_URL=your-app.example.com
 ```
 
 2. Run the example:
+
 ```bash
 python examples/bluesky_social_auth.py
 ```
@@ -73,6 +75,7 @@ python examples/bluesky_social_auth.py
 ## Security
 
 This library implements several security measures:
+
 - PKCE (Proof Key for Code Exchange) for OAuth
 - CSRF protection with state parameters
 - SSRF protection for all HTTP requests
@@ -82,6 +85,7 @@ This library implements several security measures:
 ## Error Handling
 
 The library uses a hierarchy of custom exceptions:
+
 - `AtprotoOauthError`: Base exception for all errors
 - `IdentityResolutionError`: Failed to resolve a user identity
 - `DidDocumentError`: Error retrieving or parsing DID document
