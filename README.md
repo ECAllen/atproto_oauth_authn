@@ -1,3 +1,5 @@
+***Do not use***   ...yet
+
 # OAuth Authentication for AT Protocol / Bluesky Social
 
 A Python library for implementing OAuth authentication with the AT Protocol (Bluesky Social).
