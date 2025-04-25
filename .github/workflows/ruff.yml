@@ -6,4 +6,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/ruff-action@v3
+      - name: Run Ruff format
+        run: ruff format
+      - name: Run Ruff
+        run: ruff check --output-format=github .
 
