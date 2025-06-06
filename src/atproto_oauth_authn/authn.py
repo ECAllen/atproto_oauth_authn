@@ -99,7 +99,11 @@ def get_authn_url(username: str, app_url: str) -> str:
 
     # Send the PAR request if we have a PAR endpoint
     client_id = f"https://{app_url}/oauth/client-metadata.json"
-    redirect_uri = f"https://{app_url}/oauth/callback"
+    proto = 'https'
+    if app_url == 'localhost':
+        proto = 'http'
+
+    redirect_uri = f"{proto}://{app_url}/oauth/callback"
 
     # Use the username as login_hint if available
     try:
