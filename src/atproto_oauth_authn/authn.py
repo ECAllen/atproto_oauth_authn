@@ -102,10 +102,11 @@ def get_authn_url(username: str, app_url: str) -> str:
 
     # Special case for development/testing with localhost
     if app_url == 'localhost' or app_url == '127.0.0.1':
-        client_id = 'http://localhost/'
+        client_id = 'http://localhost/oauth/client-metadata.json'
         redirect_uri = 'http://127.0.01/oauth/callback'
 
-    logging.info(f"""PAR request parameters: 
+    logging.info(f"""app URL: {app_url} 
+        PAR request parameters: 
         par_endpoint={par_endpoint}, 
         code_challenge={code_challenge},
         state={oauth_state},
