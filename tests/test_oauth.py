@@ -2,8 +2,8 @@
 
 import pytest
 import re
-from unittest.mock import patch, MagicMock
-from base64 import urlsafe_b64decode
+from unittest.mock import patch
+
 
 from atproto_oauth_authn.oauth import (
     generate_oauth_state,

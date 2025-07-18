@@ -1,7 +1,7 @@
 """Tests for DID document handling functions."""
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from atproto_oauth_authn.did import (
     retrieve_did_document,

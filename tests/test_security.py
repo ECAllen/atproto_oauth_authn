@@ -1,6 +1,5 @@
 """Tests for security functions."""
 
-import pytest
 from atproto_oauth_authn.security import is_safe_url, KNOWN_AT_PROTOCOL_DOMAINS
 
 

@@ -1,7 +1,7 @@
 """Tests for metadata retrieval functions."""
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from atproto_oauth_authn.metadata import (
     get_pds_metadata,

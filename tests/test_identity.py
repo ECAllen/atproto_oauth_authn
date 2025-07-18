@@ -1,8 +1,7 @@
 """Tests for identity resolution functions."""
 
-import re
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from atproto_oauth_authn.identity import resolve_identity
 from atproto_oauth_authn.exceptions import IdentityResolutionError
