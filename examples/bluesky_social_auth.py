@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> bool:
+    #AI! please add a docstring
     load_dotenv()
 
     username = os.getenv("USERNAME")
