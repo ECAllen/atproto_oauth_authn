@@ -1,6 +1,5 @@
 """Tests for utility functions."""
 
-import pytest
 from atproto_oauth_authn.utils import build_auth_url
 
 
