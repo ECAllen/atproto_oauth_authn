@@ -19,12 +19,12 @@ Usage:
 The script will log detailed information about the OAuth flow process and
 automatically open your browser to complete the authentication.
 """
-from dotenv import load_dotenv
+
 import logging
 import os
-import sys
 import webbrowser
 import atproto_oauth_authn
+from dotenv import load_dotenv
 
 
 # Set up logging configuration
@@ -68,7 +68,7 @@ def main() -> bool:
         print("Error: Missing APP_URL environment variable")
         return False
 
-    logging.info(f"Starting OAuth flow for username: {username}")
+    logging.info("Starting OAuth flow for username: %s", username)
 
     authn_url = atproto_oauth_authn.authn.get_authn_url(
         username=username, app_url=app_url
@@ -80,6 +80,4 @@ def main() -> bool:
 
 
 if __name__ == "__main__":
-    success = main()
-    if not success:
-        sys.exit(1)
+    main()

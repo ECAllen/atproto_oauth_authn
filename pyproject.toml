@@ -21,9 +21,6 @@ dev = [
 [tool.uv.sources]
 atproto-oauth-authn = { workspace = true }
 
-[tool.ruff]
-target-version = "py313" 
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
