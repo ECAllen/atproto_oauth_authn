@@ -1,3 +1,6 @@
+"""
+# AI! please make a docstring
+"""
 from dotenv import load_dotenv
 import logging
 import os
@@ -48,4 +51,3 @@ if __name__ == "__main__":
     success = main()
     if not success:
         sys.exit(1)
-
