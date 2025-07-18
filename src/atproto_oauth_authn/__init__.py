@@ -1,4 +1,5 @@
-# Public API exports
+#AI! please add a package level docstring
+import logging
 from .identity import resolve_identity
 from .did import get_did_document, retrieve_did_document, extract_pds_url
 from .metadata import (
@@ -25,7 +26,7 @@ from .exceptions import (
 )
 from .authn import get_authn_url
 
-import logging
+
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
