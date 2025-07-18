@@ -1,4 +1,24 @@
-#AI! please add a package level docstring
+"""AT Protocol OAuth Authentication Client.
+
+This package provides a Python client for implementing OAuth authentication
+with AT Protocol services like Bluesky. It handles the complete OAuth flow
+including identity resolution, DID document retrieval, metadata discovery,
+and secure authentication URL generation.
+
+Key features:
+- Identity resolution (handles to DIDs)
+- DID document retrieval and parsing
+- PDS and authorization server metadata discovery
+- OAuth 2.0 PKCE flow implementation
+- Security validation for URLs and domains
+- Comprehensive error handling
+
+Example usage:
+    >>> import atproto_oauth_authn
+    >>> auth_url = atproto_oauth_authn.get_authn_url("user.bsky.social", "https://myapp.com")
+    >>> print(auth_url)
+"""
+
 import logging
 from .identity import resolve_identity
 from .did import get_did_document, retrieve_did_document, extract_pds_url
