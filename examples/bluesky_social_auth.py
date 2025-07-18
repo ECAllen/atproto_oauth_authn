@@ -40,7 +40,20 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> bool:
-    #AI! please add a docstring
+    """
+    Main function to initiate Bluesky OAuth authentication flow.
+    
+    Loads environment variables, validates required parameters, and opens
+    the OAuth authentication URL in the user's default web browser.
+    
+    Returns:
+        bool: True if the OAuth flow was successfully initiated, False if
+              required environment variables are missing or other errors occur.
+    
+    Environment Variables Required:
+        USERNAME: Bluesky handle or DID to authenticate
+        APP_URL: Application URL for OAuth callbacks
+    """
     load_dotenv()
 
     username = os.getenv("USERNAME")
