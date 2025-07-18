@@ -1,5 +1,23 @@
 """
-# AI! please make a docstring
+Bluesky Social OAuth Authentication Example
+
+This example demonstrates how to use the atproto-oauth-authn library to initiate
+an OAuth authentication flow for Bluesky Social (or other AT Protocol services).
+
+The script:
+1. Loads environment variables for USERNAME and APP_URL
+2. Generates an OAuth authentication URL using the atproto_oauth_authn library
+3. Opens the authentication URL in the user's default web browser
+
+Required environment variables:
+- USERNAME: The Bluesky handle or DID to authenticate (e.g., "user.bsky.social")
+- APP_URL: Your application's URL for OAuth callbacks
+
+Usage:
+    python examples/bluesky_social_auth.py
+
+The script will log detailed information about the OAuth flow process and
+automatically open your browser to complete the authentication.
 """
 from dotenv import load_dotenv
 import logging
