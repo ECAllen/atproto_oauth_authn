@@ -1,5 +1,9 @@
 
-# AI! please add docstring
+"""AT Protocol OAuth authentication utilities.
+
+This module provides functions for performing OAuth authentication flows
+with AT Protocol services like Bluesky.
+"""
 import logging
 import urllib.parse
 import atproto_oauth_authn
@@ -16,6 +20,29 @@ logger = logging.getLogger(__name__)
 
 
 def get_authn_url(username: str, app_url: str) -> str:
+    """Generate an OAuth authorization URL for AT Protocol authentication.
+    
+    This function performs the complete OAuth flow setup by:
+    1. Resolving the username to a DID
+    2. Retrieving the DID document
+    3. Extracting the PDS URL
+    4. Getting PDS metadata
+    5. Finding the authorization server
+    6. Getting auth server metadata
+    7. Generating OAuth parameters (state, PKCE)
+    8. Sending a PAR request
+    9. Building the final authorization URL
+    
+    Args:
+        username: The AT Protocol username/handle to authenticate
+        app_url: The base URL of the application (used for client_id and redirect_uri)
+        
+    Returns:
+        The authorization URL that the user should be redirected to
+        
+    Raises:
+        Various exceptions from the atproto_oauth_authn module if any step fails
+    """
     # 2) retrieve the users DID
     try:
         user_did = atproto_oauth_authn.resolve_identity(username)
