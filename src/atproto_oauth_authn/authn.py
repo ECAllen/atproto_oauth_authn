@@ -1,3 +1,5 @@
+
+# AI! please add docstring
 import logging
 import urllib.parse
 import atproto_oauth_authn
@@ -79,7 +81,6 @@ def get_authn_url(username: str, app_url: str) -> str:
     logging.debug(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
 
     # Generate a code_verifier for PKCE
-    # TODO very param for code_verifier length
     try:
         code_verifier = atproto_oauth_authn.generate_code_verifier(48)
     except Exception as e:
