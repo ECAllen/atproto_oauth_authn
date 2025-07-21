@@ -47,40 +47,40 @@ def get_authn_url(username: str, app_url: str) -> str:
     try:
         user_did = atproto_oauth_authn.resolve_identity(username)
     except Exception as e:
-        logging.error(f"Failed to resolve username {username} to a DID: {e}")
+        logging.error("Failed to resolve username %s to a DID: %s", username, e)
         raise
 
-    logging.info(f"Resolved username {username} to DID: {user_did}")
+    logging.info("Resolved username %s to DID: %s", username, user_did)
 
     # 3) retrieve the user DID document
     try:
         did_document = atproto_oauth_authn.retrieve_did_document(user_did)
     except Exception as e:
-        logging.error(f"Failed to retrieve DID document for {user_did}: {e}")
+        logging.error("Failed to retrieve DID document for %s: %s", user_did, e)
         raise
 
     # 4) get the URL of the PDS server from the DID doc
     try:
         pds_url = atproto_oauth_authn.extract_pds_url(did_document)
     except Exception as e:
-        logging.error(f"Failed to extract PDS URL from DID document: {e}")
+        logging.error("Failed to extract PDS URL from DID document: %s", e)
         raise
 
     # 5) get the PDS server metadata from the well-known endpoint
     try:
         pds_metadata = atproto_oauth_authn.get_pds_metadata(pds_url)
     except Exception as e:
-        logging.error(f"Failed to retrieve PDS metadata: {e}")
+        logging.error("Failed to retrieve PDS metadata: %s", e)
         raise
 
     # 6) from the metadata extract the authorization server
     try:
         auth_servers = atproto_oauth_authn.extract_auth_server(pds_metadata)
     except Exception as e:
-        logging.error(f"Failed to extract authorization server from metadata: {e}")
+        logging.error("Failed to extract authorization server from metadata: %s", e)
         raise
 
-    logging.debug(f"Authorization server URL: {auth_servers[0]}")
+    logging.debug("Authorization server URL: %s", auth_servers[0])
 
     # 7) get the metadata of the authorization server
     try:
@@ -88,42 +88,42 @@ def get_authn_url(username: str, app_url: str) -> str:
             atproto_oauth_authn.get_auth_server_metadata(auth_servers)
         )
     except Exception as e:
-        logging.error(f"Failed to retrieve auth server metadata: {e}")
+        logging.error("Failed to retrieve auth server metadata: %s", e)
         raise
 
     logging.debug("Auth server metadata retrieved successfully")
     logging.debug("Auth Server Endpoints:")
-    logging.debug(f"  Authorization: {auth_endpoint}")
-    logging.debug(f"  Token: {token_endpoint}")
-    logging.debug(f"  PAR: {par_endpoint or 'Not available'}")
-    logging.debug(f"  metadata: {auth_metadata or 'Not available'}")
+    logging.debug("  Authorization: %s", auth_endpoint)
+    logging.debug("  Token: %s", token_endpoint)
+    logging.debug("  PAR: %s", par_endpoint or 'Not available')
+    logging.debug("  metadata: %s", auth_metadata or 'Not available')
 
     # Generate a state parameter for OAuth request
     try:
         oauth_state = atproto_oauth_authn.generate_oauth_state()
     except Exception as e:
-        logging.error(f"Failed to generate the oauth request: {e}")
+        logging.error("Failed to generate the oauth request: %s", e)
         raise
 
-    logging.debug(f"Generated OAuth state: {oauth_state[:10]}... (truncated)")
+    logging.debug("Generated OAuth state: %s... (truncated)", oauth_state[:10])
 
     # Generate a code_verifier for PKCE
     try:
         code_verifier = atproto_oauth_authn.generate_code_verifier(48)
     except Exception as e:
-        logging.error(f"Failed to generate code verifier: {e}")
+        logging.error("Failed to generate code verifier: %s", e)
         raise
 
-    logging.debug(f"Generated code_verifier: {code_verifier[:10]}... (truncated)")
+    logging.debug("Generated code_verifier: %s... (truncated)", code_verifier[:10])
 
     # Generate a code_challenge from the code_verifier
     try:
         code_challenge = atproto_oauth_authn.generate_code_challenge(code_verifier)
     except Exception as e:
-        logging.error(f"Failed to generate code challenge: {e}")
+        logging.error("Failed to generate code challenge: %s", e)
         raise
 
-    logging.debug(f"Generated code_challenge: {code_challenge[:10]}... (truncated)")
+    logging.debug("Generated code_challenge: %s... (truncated)", code_challenge[:10])
 
     client_id = f"https://{app_url}/oauth/client-metadata.json"
     redirect_uri = f"https://{app_url}/oauth/callback"
@@ -133,14 +133,15 @@ def get_authn_url(username: str, app_url: str) -> str:
         client_id = 'http://localhost/oauth/client-metadata.json'
         redirect_uri = 'http://127.0.01/oauth/callback'
 
-    logging.info(f"""app URL: {app_url}
+    logging.info("""app URL: %s
         PAR request parameters: 
-        par_endpoint={par_endpoint},
-        code_challenge={code_challenge},
-        state={oauth_state},
-        login_hint={username},
-        client_id={client_id},
-        redirect_uri={redirect_uri}""")
+        par_endpoint=%s,
+        code_challenge=%s,
+        state=%s,
+        login_hint=%s,
+        client_id=%s,
+        redirect_uri=%s""", 
+        app_url, par_endpoint, code_challenge, oauth_state, username, client_id, redirect_uri)
 
     # Use the username as login_hint if available
     try:
@@ -153,12 +154,12 @@ def get_authn_url(username: str, app_url: str) -> str:
             redirect_uri=redirect_uri,
         )
     except Exception as e:
-        logging.error(f"Failed to send PAR request: {e}")
+        logging.error("Failed to send PAR request: %s", e)
         raise
 
     logging.debug("PAR request successful!")
-    logging.debug(f"Request URI: {request_uri}")
-    logging.debug(f"Expires in: {expires_in} seconds")
+    logging.debug("Request URI: %s", request_uri)
+    logging.debug("Expires in: %s seconds", expires_in)
 
     qparam = urllib.parse.urlencode(
         {"client_id": client_id, "request_uri": request_uri}
@@ -167,7 +168,7 @@ def get_authn_url(username: str, app_url: str) -> str:
     assert atproto_oauth_authn.security.is_safe_url(auth_url)
 
     logging.debug("\nAuthorization URL:")
-    logging.debug(f"{auth_endpoint}?client_id={client_id}&request_uri={request_uri}")
+    logging.debug("%s?client_id=%s&request_uri=%s", auth_endpoint, client_id, request_uri)
     logging.debug(auth_url)
 
     return auth_url
