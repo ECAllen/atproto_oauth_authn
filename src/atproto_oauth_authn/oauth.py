@@ -1,6 +1,5 @@
 """OAuth functionality for AT Protocol."""
 
-# AI! please convert the fstrings in logging to lazy % formatting for all the logging in this file
 import logging
 import secrets
 import base64
@@ -31,7 +30,7 @@ def generate_oauth_state() -> str:
     # Generate 32 bytes of random data and convert to hex
     # This will result in a 64-character hex string
     state = secrets.token_hex(32)
-    logger.info(f"Generated OAuth state parameter ({len(state)} characters)")
+    logger.info("Generated OAuth state parameter (%d characters)", len(state))
     return state
 
 
@@ -69,7 +68,7 @@ def generate_code_verifier(length: int = 128) -> str:
     # Trim to desired length
     code_verifier = code_verifier[:length]
 
-    logger.info(f"Generated code_verifier ({len(code_verifier)} characters)")
+    logger.info("Generated code_verifier (%d characters)", len(code_verifier))
     return code_verifier
 
 
@@ -94,7 +93,7 @@ def generate_code_challenge(code_verifier: str) -> str:
     # Base64URL-encode the hash
     code_challenge = base64.urlsafe_b64encode(hash_bytes).decode("utf-8").rstrip("=")
 
-    logger.info(f"Generated code_challenge ({len(code_challenge)} characters)")
+    logger.info("Generated code_challenge (%d characters)", len(code_challenge))
     return code_challenge
 
 
@@ -167,14 +166,14 @@ def send_par_request(
     if login_hint:
         params["login_hint"] = login_hint
 
-    logger.info(f"Sending PAR request to: {par_endpoint}")
-    logger.debug(f"PAR request parameters: {params}")
+    logger.info("Sending PAR request to: %s", par_endpoint)
+    logger.debug("PAR request parameters: %s", params)
 
     # Check URL for SSRF vulnerabilities
     try:
         is_safe_url(par_endpoint)
     except SecurityError:
-        logger.error(f"Security check failed for URL: {par_endpoint}")
+        logger.error("Security check failed for URL: %s", par_endpoint)
         raise
 
     try:
@@ -194,8 +193,8 @@ def send_par_request(
         expires_in = data.get("expires_in")
 
         if request_uri:
-            logger.info(f"Received request_uri: {request_uri}")
-            logger.info(f"Request URI expires in: {expires_in} seconds")
+            logger.info("Received request_uri: %s", request_uri)
+            logger.info("Request URI expires in: %s seconds", expires_in)
             return request_uri, expires_in
         else:
             error_msg = "No request_uri found in PAR response"
@@ -208,12 +207,12 @@ def send_par_request(
         try:
             # Try to extract error details from response
             error_data = e.response.json()
-            logger.error(f"Error details: {error_data}")
+            logger.error("Error details: %s", error_data)
             error_msg = f"{error_msg} - {error_data}"
         except json.JSONDecodeError:
             logger.error("Could not parse error response as JSON")
         except Exception as ex:
-            logger.error(f"Error extracting details from error response: {ex}")
+            logger.error("Error extracting details from error response: %s", ex)
         raise OauthFlowError(error_msg)
     except httpx.RequestError as e:
         error_msg = f"Request error occurred during PAR request: {e}"
