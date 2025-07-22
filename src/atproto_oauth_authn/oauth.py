@@ -12,6 +12,11 @@ import httpx
 from .security import is_safe_url
 from .exceptions import OauthFlowError, SecurityError, InvalidParameterError
 
+# Forward reference for PARRequestContext
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .authn import PARRequestContext
+
 logger = logging.getLogger(__name__)
 
 
@@ -98,24 +103,14 @@ def generate_code_challenge(code_verifier: str) -> str:
 
 
 def send_par_request(
-    par_endpoint: str,
-    code_challenge: str,
-    state: str,
-    login_hint: str = None,
-    client_id: str = None,
-    redirect_uri: str = None,
+    context: "PARRequestContext",
     scope: str = "atproto transition:generic",
 ) -> Tuple[str, int]:
     """
     Send a Pushed Authorization Request (PAR) to the authorization server.
 
     Args:
-        par_endpoint: The PAR endpoint URL from the authorization server metadata
-        code_challenge: The PKCE code challenge generated from the code verifier
-        state: The OAuth state parameter for CSRF protection
-        login_hint: Optional handle or DID to pre-fill the login form
-        client_id: The OAuth client ID (URL to client metadata)
-        redirect_uri: The callback URL where the authorization code will be sent
+        context: PARRequestContext containing all necessary parameters
         scope: The requested OAuth scopes
 
     Returns:
@@ -126,27 +121,27 @@ def send_par_request(
         SecurityError: If there's a security issue with the URL
         InvalidParameterError: If required parameters are missing
     """
-    if not par_endpoint:
+    if not context.par_endpoint:
         error_msg = "Cannot send PAR request: PAR endpoint is None"
         logger.error(error_msg)
         raise InvalidParameterError(error_msg)
 
-    if not code_challenge:
+    if not context.code_challenge:
         error_msg = "Cannot send PAR request: code_challenge is required"
         logger.error(error_msg)
         raise InvalidParameterError(error_msg)
 
-    if not state:
+    if not context.oauth_state:
         error_msg = "Cannot send PAR request: state is required"
         logger.error(error_msg)
         raise InvalidParameterError(error_msg)
 
-    if not client_id:
+    if not context.client_id:
         error_msg = "Cannot send PAR request: client_id is required"
         logger.error(error_msg)
         raise InvalidParameterError(error_msg)
 
-    if not redirect_uri:
+    if not context.redirect_uri:
         error_msg = "Cannot send PAR request: redirect_uri is required"
         logger.error(error_msg)
         raise InvalidParameterError(error_msg)
@@ -156,30 +151,30 @@ def send_par_request(
         "response_type": "code",
         "code_challenge_method": "S256",
         "scope": scope,
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        "code_challenge": code_challenge,
-        "state": state,
+        "client_id": context.client_id,
+        "redirect_uri": context.redirect_uri,
+        "code_challenge": context.code_challenge,
+        "state": context.oauth_state,
     }
 
     # Add login_hint if provided
-    if login_hint:
-        params["login_hint"] = login_hint
+    if context.username:
+        params["login_hint"] = context.username
 
-    logger.info("Sending PAR request to: %s", par_endpoint)
+    logger.info("Sending PAR request to: %s", context.par_endpoint)
     logger.debug("PAR request parameters: %s", params)
 
     # Check URL for SSRF vulnerabilities
     try:
-        is_safe_url(par_endpoint)
+        is_safe_url(context.par_endpoint)
     except SecurityError:
-        logger.error("Security check failed for URL: %s", par_endpoint)
+        logger.error("Security check failed for URL: %s", context.par_endpoint)
         raise
 
     try:
         # Send the POST request with form-encoded body
         response = httpx.post(
-            par_endpoint,
+            context.par_endpoint,
             data=params,
         )
         response.raise_for_status()

@@ -209,12 +209,7 @@ def perform_par_request(context: PARRequestContext) -> Tuple[str, int]:
     # Use the username as login_hint if available
     try:
         request_uri, expires_in = atproto_oauth_authn.send_par_request(
-            par_endpoint=context.par_endpoint,
-            code_challenge=context.code_challenge,
-            state=context.oauth_state,
-            login_hint=context.username,
-            client_id=context.client_id,
-            redirect_uri=context.redirect_uri,
+            context=context,
         )
     except Exception as e:
         logging.error("Failed to send PAR request: %s", e)
