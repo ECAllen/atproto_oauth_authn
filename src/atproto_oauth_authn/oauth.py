@@ -125,7 +125,7 @@ def send_par_request(
         InvalidParameterError: If required parameters are missing (via context validation)
     """
     # Parameter validation is now handled by PARRequestContext.__post_init__
-    
+
     # Prepare the request parameters
     params = {
         "response_type": "code",

@@ -1,4 +1,5 @@
 """DID document handling for AT Protocol."""
+
 import logging
 import json
 from typing import Tuple, Dict, Any
@@ -50,23 +51,23 @@ def retrieve_did_document(did: str) -> Dict[str, Any]:
         if e.response.status_code == 404:
             error_msg = f"DID not found: {did}"
             logger.warning(error_msg)
-            raise DidDocumentError(error_msg)
-        elif e.response.status_code == 410:
+            raise DidDocumentError(error_msg) from e
+        if e.response.status_code == 410:
             error_msg = f"DID not available (tombstone) 🪦: {did}"
             logger.warning(error_msg)
-            raise DidDocumentError(error_msg)
-        else:
-            error_msg = f"HTTP error occurred while retrieving DID document: {e}"
-            logger.error(error_msg)
-            raise DidDocumentError(error_msg)
+            raise DidDocumentError(error_msg) from e
+
+        error_msg = f"HTTP error occurred while retrieving DID document: {e}"
+        logger.error(error_msg)
+        raise DidDocumentError(error_msg) from e
     except httpx.RequestError as e:
         error_msg = f"Request error occurred while retrieving DID document: {e}"
         logger.error(error_msg)
-        raise DidDocumentError(error_msg)
-    except json.JSONDecodeError:
+        raise DidDocumentError(error_msg) from e
+    except json.JSONDecodeError as e:
         error_msg = "Failed to parse JSON response from DID document retrieval"
         logger.error(error_msg)
-        raise DidDocumentError(error_msg)
+        raise DidDocumentError(error_msg) from e
 
 
 def extract_pds_url(did_document: Dict[str, Any]) -> str:
