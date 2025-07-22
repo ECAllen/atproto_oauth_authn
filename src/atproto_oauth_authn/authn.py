@@ -7,6 +7,7 @@ with AT Protocol services like Bluesky.
 import logging
 import urllib.parse
 from typing import Tuple
+from dataclasses import dataclass
 import atproto_oauth_authn
 
 logging.basicConfig(
@@ -164,23 +165,24 @@ def build_client_config(app_url: str) -> Tuple[str, str]:
     return client_id, redirect_uri
 
 
-def perform_par_request(par_endpoint: str,
-    code_challenge: str,
-    oauth_state: str,
-    username: str,
-    client_id: str,
-    redirect_uri: str,
-    app_url: str) -> Tuple[str, int]:
+@dataclass
+class PARRequestContext:
+    """Context for performing a PAR request with all necessary parameters."""
+    
+    par_endpoint: str
+    code_challenge: str
+    oauth_state: str
+    username: str
+    client_id: str
+    redirect_uri: str
+    app_url: str
+
+
+def perform_par_request(context: PARRequestContext) -> Tuple[str, int]:
     """Send PAR request and return request_uri and expires_in.
     
     Args:
-        par_endpoint: The PAR endpoint URL
-        code_challenge: The PKCE code challenge
-        oauth_state: The OAuth state parameter
-        username: The username for login hint
-        client_id: The OAuth client ID
-        redirect_uri: The OAuth redirect URI
-        app_url: The app URL for logging
+        context: PARRequestContext containing all necessary parameters
         
     Returns:
         Tuple of (request_uri, expires_in)
@@ -188,25 +190,26 @@ def perform_par_request(par_endpoint: str,
     Raises:
         Various exceptions from the atproto_oauth_authn module if PAR request fails
     """
-    logging.debug("""app URL: %s
-        PAR request parameters: 
+    logging.debug("App URL: %s", context.app_url)
+    logging.debug("""PAR request parameters: 
         par_endpoint=%s,
         code_challenge=%s,
         state=%s,
         login_hint=%s,
         client_id=%s,
         redirect_uri=%s""",
-        app_url, par_endpoint, code_challenge, oauth_state, username, client_id, redirect_uri)
+        context.par_endpoint, context.code_challenge, context.oauth_state, 
+        context.username, context.client_id, context.redirect_uri)
 
     # Use the username as login_hint if available
     try:
         request_uri, expires_in = atproto_oauth_authn.send_par_request(
-            par_endpoint=par_endpoint,
-            code_challenge=code_challenge,
-            state=oauth_state,
-            login_hint=username,
-            client_id=client_id,
-            redirect_uri=redirect_uri,
+            par_endpoint=context.par_endpoint,
+            code_challenge=context.code_challenge,
+            state=context.oauth_state,
+            login_hint=context.username,
+            client_id=context.client_id,
+            redirect_uri=context.redirect_uri,
         )
     except Exception as e:
         logging.error("Failed to send PAR request: %s", e)
@@ -243,10 +246,16 @@ def get_authn_url(username: str, app_url: str) -> str:
     # Build client configuration
     client_id, redirect_uri = build_client_config(app_url)
     # Perform PAR request
-    request_uri, _ = perform_par_request(
-        par_endpoint, code_challenge, oauth_state,
-        username, client_id, redirect_uri, app_url
+    par_context = PARRequestContext(
+        par_endpoint=par_endpoint,
+        code_challenge=code_challenge,
+        oauth_state=oauth_state,
+        username=username,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        app_url=app_url
     )
+    request_uri, _ = perform_par_request(par_context)
 
     # Build final auth URL
     qparam = urllib.parse.urlencode(
