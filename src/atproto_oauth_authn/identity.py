@@ -12,7 +12,10 @@ from .exceptions import IdentityResolutionError, SecurityError
 logger = logging.getLogger(__name__)
 
 # Constants
-HANDLE_REGEX = r"^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$"
+HANDLE_REGEX = (
+    r"^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]"
+    r"([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$"
+)
 DID_RE = r"^did:[a-z]+:[a-zA-Z0-9.%-]+$"
 
 
