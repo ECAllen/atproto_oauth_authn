@@ -9,6 +9,7 @@ import urllib.parse
 from typing import Tuple
 from dataclasses import dataclass
 import atproto_oauth_authn
+from .exceptions import InvalidParameterError
 
 logging.basicConfig(
     level=logging.INFO,
@@ -176,6 +177,19 @@ class PARRequestContext:
     client_id: str
     redirect_uri: str
     app_url: str
+
+    def __post_init__(self):
+        """Validate required parameters after initialization."""
+        if not self.par_endpoint:
+            raise InvalidParameterError("PAR endpoint is required")
+        if not self.code_challenge:
+            raise InvalidParameterError("code_challenge is required")
+        if not self.oauth_state:
+            raise InvalidParameterError("oauth_state is required")
+        if not self.client_id:
+            raise InvalidParameterError("client_id is required")
+        if not self.redirect_uri:
+            raise InvalidParameterError("redirect_uri is required")
 
 
 def perform_par_request(context: PARRequestContext) -> Tuple[str, int]:

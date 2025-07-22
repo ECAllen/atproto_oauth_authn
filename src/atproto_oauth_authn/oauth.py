@@ -122,33 +122,10 @@ def send_par_request(
     Raises:
         OauthFlowError: If the PAR request fails
         SecurityError: If there's a security issue with the URL
-        InvalidParameterError: If required parameters are missing
+        InvalidParameterError: If required parameters are missing (via context validation)
     """
-    if not context.par_endpoint:
-        error_msg = "Cannot send PAR request: PAR endpoint is None"
-        logger.error(error_msg)
-        raise InvalidParameterError(error_msg)
-
-    if not context.code_challenge:
-        error_msg = "Cannot send PAR request: code_challenge is required"
-        logger.error(error_msg)
-        raise InvalidParameterError(error_msg)
-
-    if not context.oauth_state:
-        error_msg = "Cannot send PAR request: state is required"
-        logger.error(error_msg)
-        raise InvalidParameterError(error_msg)
-
-    if not context.client_id:
-        error_msg = "Cannot send PAR request: client_id is required"
-        logger.error(error_msg)
-        raise InvalidParameterError(error_msg)
-
-    if not context.redirect_uri:
-        error_msg = "Cannot send PAR request: redirect_uri is required"
-        logger.error(error_msg)
-        raise InvalidParameterError(error_msg)
-
+    # Parameter validation is now handled by PARRequestContext.__post_init__
+    
     # Prepare the request parameters
     params = {
         "response_type": "code",
