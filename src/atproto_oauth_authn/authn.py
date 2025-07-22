@@ -6,7 +6,7 @@ with AT Protocol services like Bluesky.
 """
 import logging
 import urllib.parse
-from typing import Tuple, List, Dict, Any
+from typing import Tuple
 import atproto_oauth_authn
 
 logging.basicConfig(
@@ -164,8 +164,13 @@ def build_client_config(app_url: str) -> Tuple[str, str]:
     return client_id, redirect_uri
 
 
-def perform_par_request(par_endpoint: str, code_challenge: str, oauth_state: str, 
-                       username: str, client_id: str, redirect_uri: str, app_url: str) -> Tuple[str, int]:
+def perform_par_request(par_endpoint: str,
+    code_challenge: str,
+    oauth_state: str,
+    username: str,
+    client_id: str,
+    redirect_uri: str,
+    app_url: str) -> Tuple[str, int]:
     """Send PAR request and return request_uri and expires_in.
     
     Args:
@@ -183,14 +188,14 @@ def perform_par_request(par_endpoint: str, code_challenge: str, oauth_state: str
     Raises:
         Various exceptions from the atproto_oauth_authn module if PAR request fails
     """
-    logging.info("""app URL: %s
+    logging.debug("""app URL: %s
         PAR request parameters: 
         par_endpoint=%s,
         code_challenge=%s,
         state=%s,
         login_hint=%s,
         client_id=%s,
-        redirect_uri=%s""", 
+        redirect_uri=%s""",
         app_url, par_endpoint, code_challenge, oauth_state, username, client_id, redirect_uri)
 
     # Use the username as login_hint if available
@@ -232,20 +237,17 @@ def get_authn_url(username: str, app_url: str) -> str:
     """
     # Resolve user and discover servers
     pds_url = resolve_user_did(username)
-    auth_endpoint, token_endpoint, par_endpoint = discover_auth_server(pds_url)
-    
+    auth_endpoint, _, par_endpoint = discover_auth_server(pds_url)
     # Generate OAuth parameters
-    oauth_state, code_verifier, code_challenge = generate_oauth_params()
-    
+    oauth_state, _, code_challenge = generate_oauth_params()
     # Build client configuration
     client_id, redirect_uri = build_client_config(app_url)
-    
     # Perform PAR request
-    request_uri, expires_in = perform_par_request(
+    request_uri, _ = perform_par_request(
         par_endpoint, code_challenge, oauth_state,
         username, client_id, redirect_uri, app_url
     )
-    
+
     # Build final auth URL
     qparam = urllib.parse.urlencode(
         {"client_id": client_id, "request_uri": request_uri}
