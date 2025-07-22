@@ -74,7 +74,8 @@ def resolve_identity(username: str) -> str:
                 return did
 
             error_msg = (
-                f"Failed to resolve handle: {username}. No DID found in response"
+                f"Failed to resolve handle: {username}. "
+                "No DID found in response"
             )
             logger.info(error_msg)
             raise IdentityResolutionError(error_msg)
@@ -87,7 +88,9 @@ def resolve_identity(username: str) -> str:
             logger.info(error_msg)
             raise IdentityResolutionError(error_msg) from e
         except json.JSONDecodeError as e:
-            error_msg = "Failed to parse JSON response from handle resolution"
+            error_msg = (
+                "Failed to parse JSON response from handle resolution"
+            )
             logger.info(error_msg)
             raise IdentityResolutionError(error_msg) from e
     elif re.match(DID_RE, username):
@@ -95,6 +98,8 @@ def resolve_identity(username: str) -> str:
         logger.info("Username is already a DID: %s", username)
         return username
     else:
-        error_msg = f"Username '{username}' is neither a valid handle nor a DID"
+        error_msg = (
+            f"Username '{username}' is neither a valid handle nor a DID"
+        )
         logger.warning(error_msg)
         raise IdentityResolutionError(error_msg)

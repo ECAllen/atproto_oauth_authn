@@ -108,7 +108,10 @@ def get_auth_server_metadata(
         SecurityError: If there's a security issue with the URL
     """
     if not auth_servers or not isinstance(auth_servers, list):
-        error_msg = "Cannot get auth server metadata: No authorization servers provided"
+        error_msg = (
+            "Cannot get auth server metadata: "
+            "No authorization servers provided"
+        )
         logger.error(error_msg)
         raise MetadataError(error_msg)
 
@@ -153,27 +156,42 @@ def get_auth_server_metadata(
 
                 return metadata, auth_endpoint, token_endpoint, par_endpoint
             else:
-                error_msg = f"Missing required endpoints in auth server metadata from {auth_server}"
+                error_msg = (
+                    "Missing required endpoints in auth server metadata "
+                    f"from {auth_server}"
+                )
                 logger.warning(error_msg)
                 errors.append(error_msg)
                 continue
 
         except httpx.HTTPStatusError as e:
-            error_msg = f"HTTP error occurred while retrieving auth server metadata from {auth_server}: {e}"
+            error_msg = (
+                "HTTP error occurred while retrieving auth server metadata "
+                f"from {auth_server}: {e}"
+            )
             logger.warning(error_msg)
             errors.append(error_msg)
             continue
         except httpx.RequestError as e:
-            error_msg = f"Request error occurred while retrieving auth server metadata from {auth_server}: {e}"
+            error_msg = (
+                "Request error occurred while retrieving auth server metadata "
+                f"from {auth_server}: {e}"
+            )
             logger.warning(error_msg)
             errors.append(error_msg)
             continue
         except json.JSONDecodeError:
-            error_msg = f"Failed to parse JSON response from auth server metadata retrieval from {auth_server}"
+            error_msg = (
+                "Failed to parse JSON response from auth server metadata "
+                f"retrieval from {auth_server}"
+            )
             logger.warning(error_msg)
             errors.append(error_msg)
             continue
 
-    error_msg = f"Failed to retrieve metadata from any authorization server: {'; '.join(errors)}"
+    error_msg = (
+        "Failed to retrieve metadata from any authorization server: "
+        f"{'; '.join(errors)}"
+    )
     logger.error(error_msg)
     raise MetadataError(error_msg)
