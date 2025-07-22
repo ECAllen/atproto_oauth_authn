@@ -1,5 +1,4 @@
 """Metadata retrieval functions for AT Protocol."""
-#AI! please convert fstring logging to lazy % logging
 import logging
 import json
 from typing import List, Dict, Any, Tuple
@@ -32,13 +31,13 @@ def get_pds_metadata(pds_url: str) -> Dict[str, Any]:
         raise MetadataError(error_msg)
 
     metadata_url = f"{pds_url.rstrip('/')}/.well-known/oauth-protected-resource"
-    logger.info(f"Fetching PDS metadata from: {metadata_url}")
+    logger.info("Fetching PDS metadata from: %s", metadata_url)
 
     # Check URL for SSRF vulnerabilities
     try:
         is_safe_url(metadata_url)
     except SecurityError:
-        logger.error(f"Security check failed for URL: {metadata_url}")
+        logger.error("Security check failed for URL: %s", metadata_url)
         raise
 
     try:
@@ -87,7 +86,7 @@ def extract_auth_server(metadata: Dict[str, Any]) -> List[str]:
         raise MetadataError(error_msg)
 
     # Return the list of authorization servers
-    logger.info(f"Found authorization servers: {auth_servers}")
+    logger.info("Found authorization servers: %s", auth_servers)
     return auth_servers
 
 
@@ -118,13 +117,13 @@ def get_auth_server_metadata(
         metadata_url = (
             f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
         )
-        logger.info(f"Trying to fetch auth server metadata from: {metadata_url}")
+        logger.info("Trying to fetch auth server metadata from: %s", metadata_url)
 
         # Check URL for SSRF vulnerabilities
         try:
             is_safe_url(metadata_url)
         except SecurityError as e:
-            logger.error(f"Security check failed for URL: {metadata_url}")
+            logger.error("Security check failed for URL: %s", metadata_url)
             errors.append(f"Security error for {auth_server}: {str(e)}")
             continue
 
@@ -134,7 +133,7 @@ def get_auth_server_metadata(
 
             metadata = response.json()
             logger.info(
-                f"Successfully retrieved auth server metadata from {auth_server}"
+                "Successfully retrieved auth server metadata from %s", auth_server
             )
 
             # Extract endpoints from metadata
@@ -143,10 +142,10 @@ def get_auth_server_metadata(
             par_endpoint = metadata.get("pushed_authorization_request_endpoint")
 
             if auth_endpoint and token_endpoint:
-                logger.info(f"Found authorization endpoint: {auth_endpoint}")
-                logger.info(f"Found token endpoint: {token_endpoint}")
+                logger.info("Found authorization endpoint: %s", auth_endpoint)
+                logger.info("Found token endpoint: %s", token_endpoint)
                 if par_endpoint:
-                    logger.info(f"Found PAR endpoint: {par_endpoint}")
+                    logger.info("Found PAR endpoint: %s", par_endpoint)
                 else:
                     logger.warning("PAR endpoint not found in auth server metadata")
                     par_endpoint = None
