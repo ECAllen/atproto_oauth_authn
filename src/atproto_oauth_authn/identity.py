@@ -1,4 +1,5 @@
 """Identity resolution functions for AT Protocol."""
+
 import logging
 import re
 import json
@@ -68,24 +69,24 @@ def resolve_identity(username: str) -> str:
             if did:
                 logger.debug("Resolved handle %s to DID: %s", username, did)
                 return did
-            else:
-                error_msg = (
-                    f"Failed to resolve handle: {username}. No DID found in response"
-                )
-                logger.info(error_msg)
-                raise IdentityResolutionError(error_msg)
+
+            error_msg = (
+                f"Failed to resolve handle: {username}. No DID found in response"
+            )
+            logger.info(error_msg)
+            raise IdentityResolutionError(error_msg)
         except httpx.HTTPStatusError as e:
             error_msg = f"HTTP error occurred while resolving handle: {e}"
             logger.info(error_msg)
-            raise IdentityResolutionError(error_msg)
+            raise IdentityResolutionError(error_msg) from e
         except httpx.RequestError as e:
             error_msg = f"Request error occurred while resolving handle: {e}"
             logger.info(error_msg)
-            raise IdentityResolutionError(error_msg)
-        except json.JSONDecodeError:
+            raise IdentityResolutionError(error_msg) from e
+        except json.JSONDecodeError as e:
             error_msg = "Failed to parse JSON response from handle resolution"
             logger.info(error_msg)
-            raise IdentityResolutionError(error_msg)
+            raise IdentityResolutionError(error_msg) from e
     elif re.match(DID_RE, username):
         # If the username is already a DID, return it directly
         logger.info("Username is already a DID: %s", username)
