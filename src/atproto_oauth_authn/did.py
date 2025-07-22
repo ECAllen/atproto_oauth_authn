@@ -1,5 +1,5 @@
 """DID document handling for AT Protocol."""
-
+#AI! please convert f strings in logger to lazy logging %
 import logging
 import json
 from typing import Tuple, Dict, Any
