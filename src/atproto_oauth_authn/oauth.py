@@ -1,5 +1,6 @@
 """OAuth functionality for AT Protocol."""
 
+# AI! please convert the fstrings in logging to lazy % formatting for all the logging in this file
 import logging
 import secrets
 import base64
