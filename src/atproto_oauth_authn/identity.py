@@ -1,5 +1,5 @@
 """Identity resolution functions for AT Protocol."""
-
+#AI! please convert logging lines using f-strings to lazy fomatting
 import logging
 import re
 import json
