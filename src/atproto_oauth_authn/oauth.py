@@ -7,15 +7,18 @@ import hashlib
 import json
 from typing import Tuple
 
+# Forward reference for PARRequestContext
+from typing import TYPE_CHECKING
+
 import httpx
 
 from .security import is_safe_url
 from .exceptions import OauthFlowError, SecurityError, InvalidParameterError
 
-# Forward reference for PARRequestContext
-from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from .authn import PARRequestContext
+
 
 logger = logging.getLogger(__name__)
 
@@ -191,10 +194,10 @@ def send_par_request(
             logger.info("Received request_uri: %s", request_uri)
             logger.info("Request URI expires in: %s seconds", expires_in)
             return request_uri, expires_in
-        else:
-            error_msg = "No request_uri found in PAR response"
-            logger.error(error_msg)
-            raise OauthFlowError(error_msg)
+
+        error_msg = "No request_uri found in PAR response"
+        logger.error(error_msg)
+        raise OauthFlowError(error_msg)
 
     except httpx.HTTPStatusError as e:
         error_msg = f"HTTP error occurred during PAR request: {e}"
@@ -206,14 +209,12 @@ def send_par_request(
             error_msg = f"{error_msg} - {error_data}"
         except json.JSONDecodeError:
             logger.error("Could not parse error response as JSON")
-        except Exception as ex:
-            logger.error("Error extracting details from error response: %s", ex)
-        raise OauthFlowError(error_msg)
+        raise OauthFlowError(error_msg) from e
     except httpx.RequestError as e:
         error_msg = f"Request error occurred during PAR request: {e}"
         logger.error(error_msg)
-        raise OauthFlowError(error_msg)
-    except json.JSONDecodeError:
+        raise OauthFlowError(error_msg) from e
+    except json.JSONDecodeError as e:
         error_msg = "Failed to parse JSON response from PAR request"
         logger.error(error_msg)
-        raise OauthFlowError(error_msg)
+        raise OauthFlowError(error_msg) from e
