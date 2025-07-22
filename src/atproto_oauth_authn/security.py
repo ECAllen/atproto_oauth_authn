@@ -95,10 +95,10 @@ def is_safe_url(url: str) -> bool:
                     error_msg = f"SSRF protection: Rejected numeric IP hostname: {url}"
                     logger.warning(error_msg)
                     raise SecurityError(error_msg)
-            except ValueError:
+            except ValueError as e:
                 error_msg = f"SSRF protection: Rejected unusual numeric hostname: {url}"
                 logger.warning(error_msg)
-                raise SecurityError(error_msg)
+                raise SecurityError(error_msg) from e
 
         # Whitelist of known AT Protocol domains
         domain_parts = hostname.split(".")
@@ -108,6 +108,7 @@ def is_safe_url(url: str) -> bool:
                 return True
 
         # For domains not in the whitelist, log a warning but still allow if other checks passed
+#AI! please covert this logging to lazy % logging
         logger.warning(
             f"SSRF protection: URL hostname not in AT Protocol whitelist: {hostname}"
         )
@@ -119,4 +120,4 @@ def is_safe_url(url: str) -> bool:
     except Exception as e:
         error_msg = f"SSRF protection: URL validation error: {e}"
         logger.error(error_msg)
-        raise SecurityError(error_msg)
+        raise SecurityError(error_msg) from e
