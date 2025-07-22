@@ -1,9 +1,9 @@
-
 """AT Protocol OAuth authentication utilities.
 
 This module provides functions for performing OAuth authentication flows
 with AT Protocol services like Bluesky.
 """
+
 import logging
 import urllib.parse
 from typing import Tuple
@@ -23,13 +23,13 @@ logger = logging.getLogger(__name__)
 
 def resolve_user_did(username: str) -> str:
     """Resolve username to DID and extract PDS URL.
-    
+
     Args:
         username: The AT Protocol username/handle to resolve
-        
+
     Returns:
         The PDS URL for the user
-        
+
     Raises:
         Various exceptions from the atproto_oauth_authn module if any step fails
     """
@@ -61,13 +61,13 @@ def resolve_user_did(username: str) -> str:
 
 def discover_auth_server(pds_url: str) -> Tuple[str, str, str]:
     """Discover authorization server from PDS metadata.
-    
+
     Args:
         pds_url: The PDS server URL
-        
+
     Returns:
         Tuple of (auth_endpoint, token_endpoint, par_endpoint)
-        
+
     Raises:
         Various exceptions from the atproto_oauth_authn module if any step fails
     """
@@ -100,18 +100,18 @@ def discover_auth_server(pds_url: str) -> Tuple[str, str, str]:
     logging.debug("Auth Server Endpoints:")
     logging.debug("  Authorization: %s", auth_endpoint)
     logging.debug("  Token: %s", token_endpoint)
-    logging.debug("  PAR: %s", par_endpoint or 'Not available')
-    logging.debug("  metadata: %s", auth_metadata or 'Not available')
+    logging.debug("  PAR: %s", par_endpoint or "Not available")
+    logging.debug("  metadata: %s", auth_metadata or "Not available")
 
     return auth_endpoint, token_endpoint, par_endpoint
 
 
 def generate_oauth_params() -> Tuple[str, str, str]:
     """Generate OAuth state, code verifier, and code challenge.
-    
+
     Returns:
         Tuple of (oauth_state, code_verifier, code_challenge)
-        
+
     Raises:
         Various exceptions from the atproto_oauth_authn module if generation fails
     """
@@ -147,10 +147,10 @@ def generate_oauth_params() -> Tuple[str, str, str]:
 
 def build_client_config(app_url: str) -> Tuple[str, str]:
     """Build client_id and redirect_uri from app_url.
-    
+
     Args:
         app_url: The base URL of the application
-        
+
     Returns:
         Tuple of (client_id, redirect_uri)
     """
@@ -158,9 +158,9 @@ def build_client_config(app_url: str) -> Tuple[str, str]:
     redirect_uri = f"https://{app_url}/oauth/callback"
 
     # Special case for development/testing with localhost
-    if app_url in ['localhost','127.0.0.1']:
-        client_id = 'http://localhost/oauth/client-metadata.json'
-        redirect_uri = 'http://127.0.01/oauth/callback'
+    if app_url in ["localhost", "127.0.0.1"]:
+        client_id = "http://localhost/oauth/client-metadata.json"
+        redirect_uri = "http://127.0.01/oauth/callback"
 
     return client_id, redirect_uri
 
@@ -168,7 +168,7 @@ def build_client_config(app_url: str) -> Tuple[str, str]:
 @dataclass
 class PARRequestContext:
     """Context for performing a PAR request with all necessary parameters."""
-    
+
     par_endpoint: str
     code_challenge: str
     oauth_state: str
@@ -180,27 +180,32 @@ class PARRequestContext:
 
 def perform_par_request(context: PARRequestContext) -> Tuple[str, int]:
     """Send PAR request and return request_uri and expires_in.
-    
+
     Args:
         context: PARRequestContext containing all necessary parameters
-        
+
     Returns:
         Tuple of (request_uri, expires_in)
-        
+
     Raises:
         Various exceptions from the atproto_oauth_authn module if PAR request fails
     """
     logging.debug("App URL: %s", context.app_url)
-    logging.debug("""PAR request parameters: 
+    logging.debug(
+        """PAR request parameters:
         par_endpoint=%s,
         code_challenge=%s,
         state=%s,
         login_hint=%s,
         client_id=%s,
         redirect_uri=%s""",
-        context.par_endpoint, context.code_challenge, context.oauth_state, 
-        context.username, context.client_id, context.redirect_uri)
-
+        context.par_endpoint,
+        context.code_challenge,
+        context.oauth_state,
+        context.username,
+        context.client_id,
+        context.redirect_uri,
+    )
     # Use the username as login_hint if available
     try:
         request_uri, expires_in = atproto_oauth_authn.send_par_request(
@@ -224,17 +229,17 @@ def perform_par_request(context: PARRequestContext) -> Tuple[str, int]:
 
 def get_authn_url(username: str, app_url: str) -> str:
     """Generate an OAuth authorization URL for AT Protocol authentication.
-    
+
     This function orchestrates the complete OAuth flow setup by calling
     specialized helper functions for each step of the process.
-    
+
     Args:
         username: The AT Protocol username/handle to authenticate
         app_url: The base URL of the application (used for client_id and redirect_uri)
-        
+
     Returns:
         The authorization URL that the user should be redirected to
-        
+
     Raises:
         Various exceptions from the atproto_oauth_authn module if any step fails
     """
@@ -253,7 +258,7 @@ def get_authn_url(username: str, app_url: str) -> str:
         username=username,
         client_id=client_id,
         redirect_uri=redirect_uri,
-        app_url=app_url
+        app_url=app_url,
     )
     request_uri, _ = perform_par_request(par_context)
 
@@ -265,7 +270,9 @@ def get_authn_url(username: str, app_url: str) -> str:
     assert atproto_oauth_authn.security.is_safe_url(auth_url)
 
     logging.debug("\nAuthorization URL:")
-    logging.debug("%s?client_id=%s&request_uri=%s", auth_endpoint, client_id, request_uri)
+    logging.debug(
+        "%s?client_id=%s&request_uri=%s", auth_endpoint, client_id, request_uri
+    )
     logging.debug(auth_url)
 
     return auth_url
