@@ -1,5 +1,4 @@
 """Identity resolution functions for AT Protocol."""
-#AI! please convert logging lines using f-strings to lazy fomatting
 import logging
 import re
 import json
@@ -35,13 +34,13 @@ def resolve_identity(username: str) -> str:
 
     if re.match(HANDLE_REGEX, username):
         # Handle the case where username is a handle
-        logger.debug(f"Username is a handle: {username}")
+        logger.debug("Username is a handle: %s", username)
 
         # Extract domain and TLD from the handle
         parts = username.split(".")
         if len(parts) >= 2:
             domain_tld = ".".join(parts[1:])
-            logger.info(f"Extracted domain and TLD: {domain_tld}")
+            logger.info("Extracted domain and TLD: %s", domain_tld)
         else:
             error_msg = f"Could not extract domain from handle: {username}"
             logger.warning(error_msg)
@@ -53,7 +52,7 @@ def resolve_identity(username: str) -> str:
         try:
             is_safe_url(url)
         except SecurityError:
-            logger.error(f"Security check failed for URL: {url}")
+            logger.error("Security check failed for URL: %s", url)
             raise
 
         # Make HTTP request to resolve handle to DID
@@ -67,7 +66,7 @@ def resolve_identity(username: str) -> str:
             # Extract the DID from the response
             did = data.get("did")
             if did:
-                logger.debug(f"Resolved handle {username} to DID: {did}")
+                logger.debug("Resolved handle %s to DID: %s", username, did)
                 return did
             else:
                 error_msg = (
@@ -89,7 +88,7 @@ def resolve_identity(username: str) -> str:
             raise IdentityResolutionError(error_msg)
     elif re.match(DID_RE, username):
         # If the username is already a DID, return it directly
-        logger.info(f"Username is already a DID: {username}")
+        logger.info("Username is already a DID: %s", username)
         return username
     else:
         error_msg = f"Username '{username}' is neither a valid handle nor a DID"
