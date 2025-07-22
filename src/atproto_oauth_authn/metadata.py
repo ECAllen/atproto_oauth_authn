@@ -1,5 +1,5 @@
 """Metadata retrieval functions for AT Protocol."""
-
+#AI! please convert fstring logging to lazy % logging
 import logging
 import json
 from typing import List, Dict, Any, Tuple
