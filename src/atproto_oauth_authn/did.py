@@ -1,5 +1,4 @@
 """DID document handling for AT Protocol."""
-#AI! please convert f strings in logger to lazy logging %
 import logging
 import json
 from typing import Tuple, Dict, Any
@@ -35,7 +34,7 @@ def retrieve_did_document(did: str) -> Dict[str, Any]:
     try:
         is_safe_url(url)
     except SecurityError:
-        logger.error(f"Security check failed for URL: {url}")
+        logger.error("Security check failed for URL: %s", url)
         raise
 
     try:
@@ -45,7 +44,7 @@ def retrieve_did_document(did: str) -> Dict[str, Any]:
 
         # Parse the JSON response
         did_document = response.json()
-        logger.info(f"Retrieved DID document for {did}")
+        logger.info("Retrieved DID document for %s", did)
         return did_document
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
@@ -90,7 +89,7 @@ def extract_pds_url(did_document: Dict[str, Any]) -> str:
     if "service" in did_document and len(did_document["service"]) > 0:
         pds_url = did_document["service"][0].get("serviceEndpoint")
         if pds_url:
-            logger.info(f"Extracted PDS URL: {pds_url}")
+            logger.info("Extracted PDS URL: %s", pds_url)
             return pds_url
 
     error_msg = "Could not find PDS URL in DID document"
