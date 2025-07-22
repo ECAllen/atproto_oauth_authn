@@ -51,15 +51,15 @@ def get_pds_metadata(pds_url: str) -> Dict[str, Any]:
     except httpx.HTTPStatusError as e:
         error_msg = f"HTTP error occurred while retrieving PDS metadata: {e}"
         logger.error(error_msg)
-        raise MetadataError(error_msg)
+        raise MetadataError(error_msg) from e
     except httpx.RequestError as e:
         error_msg = f"Request error occurred while retrieving PDS metadata: {e}"
         logger.error(error_msg)
-        raise MetadataError(error_msg)
+        raise MetadataError(error_msg) from e
     except json.JSONDecodeError:
         error_msg = "Failed to parse JSON response from PDS metadata retrieval"
         logger.error(error_msg)
-        raise MetadataError(error_msg)
+        raise MetadataError(error_msg) from e
 
 
 def extract_auth_server(metadata: Dict[str, Any]) -> List[str]:
@@ -108,10 +108,7 @@ def get_auth_server_metadata(
         SecurityError: If there's a security issue with the URL
     """
     if not auth_servers or not isinstance(auth_servers, list):
-        error_msg = (
-            "Cannot get auth server metadata: "
-            "No authorization servers provided"
-        )
+        error_msg = "Cannot get auth server metadata: No authorization servers provided"
         logger.error(error_msg)
         raise MetadataError(error_msg)
 
@@ -155,14 +152,13 @@ def get_auth_server_metadata(
                     par_endpoint = None
 
                 return metadata, auth_endpoint, token_endpoint, par_endpoint
-            else:
-                error_msg = (
-                    "Missing required endpoints in auth server metadata "
-                    f"from {auth_server}"
-                )
-                logger.warning(error_msg)
-                errors.append(error_msg)
-                continue
+
+            error_msg = (
+                f"Missing required endpoints in auth server metadata from {auth_server}"
+            )
+            logger.warning(error_msg)
+            errors.append(error_msg)
+            continue
 
         except httpx.HTTPStatusError as e:
             error_msg = (
