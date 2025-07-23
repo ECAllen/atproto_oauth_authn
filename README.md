@@ -23,7 +23,7 @@ This library implements the AT Protocol OAuth authentication flow as [documented
 ## Installation
 
 ```bash
-pip install atproto-oauth-authn
+pip install atproto_oauth_authn
 ```
 
 ## Quick Start
