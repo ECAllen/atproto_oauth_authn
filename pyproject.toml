@@ -16,6 +16,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "atproto-oauth-authn",
+    "pylint>=3.3.7",
 ]
 
 [tool.uv.sources]

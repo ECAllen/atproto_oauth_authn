@@ -47,7 +47,6 @@ from .exceptions import (
 from .authn import get_authn_url
 
 
-
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 __version__ = "0.1.0"
