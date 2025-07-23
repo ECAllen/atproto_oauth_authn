@@ -56,7 +56,7 @@ def get_pds_metadata(pds_url: str) -> Dict[str, Any]:
         error_msg = f"Request error occurred while retrieving PDS metadata: {e}"
         logger.error(error_msg)
         raise MetadataError(error_msg) from e
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
         error_msg = "Failed to parse JSON response from PDS metadata retrieval"
         logger.error(error_msg)
         raise MetadataError(error_msg) from e
@@ -91,11 +91,11 @@ def extract_auth_server(metadata: Dict[str, Any]) -> List[str]:
     return auth_servers
 
 
-def _fetch_single_auth_server_metadata(auth_server: str) -> Tuple[Dict[str, Any], str, str, str]:
+def _fetch_single_auth_server_metadata(
+    auth_server: str,
+) -> Tuple[Dict[str, Any], str, str, str]:
     """Fetch metadata from a single auth server."""
-    metadata_url = (
-        f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
-    )
+    metadata_url = f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
     logger.info("Trying to fetch auth server metadata from: %s", metadata_url)
 
     # Check URL for SSRF vulnerabilities
@@ -105,9 +105,7 @@ def _fetch_single_auth_server_metadata(auth_server: str) -> Tuple[Dict[str, Any]
     response.raise_for_status()
 
     metadata = response.json()
-    logger.info(
-        "Successfully retrieved auth server metadata from %s", auth_server
-    )
+    logger.info("Successfully retrieved auth server metadata from %s", auth_server)
 
     return _extract_endpoints_from_metadata(metadata, auth_server)
 
@@ -122,8 +120,7 @@ def _extract_endpoints_from_metadata(
 
     if not auth_endpoint or not token_endpoint:
         error_msg = (
-            "Missing required endpoints in auth server metadata "
-            f"from {auth_server}"
+            f"Missing required endpoints in auth server metadata from {auth_server}"
         )
         raise MetadataError(error_msg)
 
@@ -154,10 +151,7 @@ def get_auth_server_metadata(
         SecurityError: If there's a security issue with the URL
     """
     if not auth_servers or not isinstance(auth_servers, list):
-        error_msg = (
-            "Cannot get auth server metadata: "
-            "No authorization servers provided"
-        )
+        error_msg = "Cannot get auth server metadata: No authorization servers provided"
         logger.error(error_msg)
         raise MetadataError(error_msg)
 
