@@ -49,7 +49,7 @@ def test_get_auth_server_metadata(mock_get, mock_response, sample_auth_server_me
     mock_get.return_value = mock_response(sample_auth_server_metadata)
 
     result = get_auth_server_metadata(["https://auth.example.com"])
-    metadata, auth_endpoint, token_endpoint, par_endpoint = result
+    metadata, _, _, _ = result
     assert metadata == sample_auth_server_metadata
     mock_get.assert_called_once()
 
@@ -68,7 +68,7 @@ def test_get_auth_server_metadata_fallback(
     result = get_auth_server_metadata(
         ["https://auth1.example.com", "https://auth2.example.com"]
     )
-    metadata, auth_endpoint, token_endpoint, par_endpoint = result
+    metadata, _, _, _ = result
     assert metadata == sample_auth_server_metadata
     assert mock_get.call_count == 2
 
@@ -87,7 +87,7 @@ def test_get_auth_server_metadata_multiple_servers(
     result = get_auth_server_metadata(
         ["https://auth1.example.com", "https://auth2.example.com"]
     )
-    metadata, auth_endpoint, token_endpoint, par_endpoint = result
+    metadata, _, _, _ = result
     assert metadata == sample_auth_server_metadata
     assert mock_get.call_count == 2
 
