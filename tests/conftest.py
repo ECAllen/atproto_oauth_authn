@@ -8,7 +8,7 @@ from typing import Dict, Any
 @pytest.fixture
 def mock_response():
     """Create a mock response object with customizable status code and json content.
-    
+
     Returns:
         MockResponse: A factory function that creates mock HTTP response objects
             with the specified JSON data and status code. The mock response
@@ -18,10 +18,10 @@ def mock_response():
 
     class MockResponse:
         """Mock HTTP response object for testing."""
-        
+
         def __init__(self, json_data, status_code=200):
             """Initialize mock response with JSON data and status code.
-            
+
             Args:
                 json_data: The JSON data to return from json() method
                 status_code: HTTP status code (default: 200)
@@ -38,6 +38,7 @@ def mock_response():
         def raise_for_status(self):
             """Raise an exception if status code indicates an error."""
             if self.status_code >= 400:
+                #AI! please more specific exception
                 raise Exception(f"HTTP Error: {self.status_code}")
             return self
 
