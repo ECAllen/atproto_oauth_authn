@@ -2,6 +2,7 @@
 
 import json
 import pytest
+import requests
 from typing import Dict, Any
 
 
@@ -38,8 +39,7 @@ def mock_response():
         def raise_for_status(self):
             """Raise an exception if status code indicates an error."""
             if self.status_code >= 400:
-                #AI! please more specific exception
-                raise Exception(f"HTTP Error: {self.status_code}")
+                raise requests.HTTPError(f"HTTP Error: {self.status_code}")
             return self
 
     return MockResponse
