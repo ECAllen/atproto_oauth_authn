@@ -3,7 +3,6 @@
 from typing import Dict, Any
 import json
 import pytest
-import requests
 import httpx
 
 
@@ -41,15 +40,19 @@ def mock_response():
             """Raise an exception if status code indicates an error."""
             if self.status_code >= 400:
                 # Create a mock response object that httpx.HTTPStatusError expects
-                mock_response = type('MockResponse', (), {
-                    'status_code': self.status_code,
-                    'text': self.text,
-                    'content': self.content
-                })()
+                mock_response = type(
+                    "MockResponse",
+                    (),
+                    {
+                        "status_code": self.status_code,
+                        "text": self.text,
+                        "content": self.content,
+                    },
+                )()
                 raise httpx.HTTPStatusError(
-                    f"HTTP Error: {self.status_code}", 
-                    request=None, 
-                    response=mock_response
+                    f"HTTP Error: {self.status_code}",
+                    request=None,
+                    response=mock_response,
                 )
             return self
 
