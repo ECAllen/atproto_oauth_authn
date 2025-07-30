@@ -4,6 +4,7 @@ from typing import Dict, Any
 import json
 import pytest
 import requests
+import httpx
 
 
 @pytest.fixture
