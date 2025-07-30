@@ -18,7 +18,7 @@ def test_resolve_identity_with_invalid_did():
         resolve_identity("did:invalid")
 
 
-@patch("atproto_oauth_authn.identity.requests.get")
+@patch("atproto_oauth_authn.identity.httpx.get")
 def test_resolve_identity_with_handle(mock_get, mock_response):
     """Test that handles are resolved to DIDs."""
     mock_get.return_value = mock_response({"did": "did:plc:abcdefghijklmnopqrstuvwxyz"})
@@ -28,7 +28,7 @@ def test_resolve_identity_with_handle(mock_get, mock_response):
     mock_get.assert_called_once()
 
 
-@patch("atproto_oauth_authn.identity.requests.get")
+@patch("atproto_oauth_authn.identity.httpx.get")
 def test_resolve_identity_with_handle_error(mock_get, mock_response):
     """Test that handle resolution errors are handled properly."""
     mock_get.return_value = mock_response({}, status_code=404)

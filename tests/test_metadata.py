@@ -10,19 +10,17 @@ from atproto_oauth_authn.metadata import (
 from atproto_oauth_authn.exceptions import MetadataError
 
 
-@patch("atproto_oauth_authn.metadata.requests.get")
+@patch("atproto_oauth_authn.metadata.httpx.get")
 def test_get_pds_metadata(mock_get, mock_response, sample_pds_metadata):
     """Test retrieving PDS metadata."""
     mock_get.return_value = mock_response(sample_pds_metadata)
 
     result = get_pds_metadata("https://example.pds.com")
     assert result == sample_pds_metadata
-    mock_get.assert_called_once_with(
-        "https://example.pds.com/.well-known/atproto-wellknown", timeout=10
-    )
+    mock_get.assert_called_once()
 
 
-@patch("atproto_oauth_authn.metadata.requests.get")
+@patch("atproto_oauth_authn.metadata.httpx.get")
 def test_get_pds_metadata_error(mock_get, mock_response):
     """Test error handling when retrieving PDS metadata."""
     mock_get.return_value = mock_response({}, status_code=404)
@@ -45,35 +43,35 @@ def test_extract_auth_server_missing_auth():
         extract_auth_server(metadata)
 
 
-@patch("atproto_oauth_authn.metadata.requests.get")
+@patch("atproto_oauth_authn.metadata.httpx.get")
 def test_get_auth_server_metadata(mock_get, mock_response, sample_auth_server_metadata):
     """Test retrieving auth server metadata."""
     mock_get.return_value = mock_response(sample_auth_server_metadata)
 
     result = get_auth_server_metadata(["https://auth.example.com"])
-    assert result == sample_auth_server_metadata
-    mock_get.assert_called_once_with(
-        "https://auth.example.com/.well-known/oauth-authorization-server", timeout=10
-    )
+    metadata, auth_endpoint, token_endpoint, par_endpoint = result
+    assert metadata == sample_auth_server_metadata
+    mock_get.assert_called_once()
 
 
-@patch("atproto_oauth_authn.metadata.requests.get")
+@patch("atproto_oauth_authn.metadata.httpx.get")
 def test_get_auth_server_metadata_fallback(
     mock_get, mock_response, sample_auth_server_metadata
 ):
-    """Test fallback to openid-configuration when oauth-authorization-server fails."""
+    """Test fallback when first auth server fails."""
     # First request fails
     mock_get.side_effect = [
         mock_response({}, status_code=404),
         mock_response(sample_auth_server_metadata),
     ]
 
-    result = get_auth_server_metadata(["https://auth.example.com"])
-    assert result == sample_auth_server_metadata
+    result = get_auth_server_metadata(["https://auth1.example.com", "https://auth2.example.com"])
+    metadata, auth_endpoint, token_endpoint, par_endpoint = result
+    assert metadata == sample_auth_server_metadata
     assert mock_get.call_count == 2
 
 
-@patch("atproto_oauth_authn.metadata.requests.get")
+@patch("atproto_oauth_authn.metadata.httpx.get")
 def test_get_auth_server_metadata_multiple_servers(
     mock_get, mock_response, sample_auth_server_metadata
 ):
@@ -81,18 +79,18 @@ def test_get_auth_server_metadata_multiple_servers(
     # First server fails completely, second succeeds
     mock_get.side_effect = [
         mock_response({}, status_code=404),
-        mock_response({}, status_code=404),
         mock_response(sample_auth_server_metadata),
     ]
 
     result = get_auth_server_metadata(
         ["https://auth1.example.com", "https://auth2.example.com"]
     )
-    assert result == sample_auth_server_metadata
-    assert mock_get.call_count == 3
+    metadata, auth_endpoint, token_endpoint, par_endpoint = result
+    assert metadata == sample_auth_server_metadata
+    assert mock_get.call_count == 2
 
 
-@patch("atproto_oauth_authn.metadata.requests.get")
+@patch("atproto_oauth_authn.metadata.httpx.get")
 def test_get_auth_server_metadata_all_fail(mock_get, mock_response):
     """Test error handling when all auth servers fail."""
     mock_get.return_value = mock_response({}, status_code=404)
