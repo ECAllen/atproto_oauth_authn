@@ -8,7 +8,11 @@ import logging
 import urllib.parse
 from typing import Tuple
 from dataclasses import dataclass
-import atproto_oauth_authn
+from .identity import resolve_identity
+from .did import retrieve_did_document, extract_pds_url
+from .metadata import get_pds_metadata, extract_auth_server, get_auth_server_metadata
+from .oauth import generate_oauth_state, generate_code_verifier, generate_code_challenge, send_par_request
+from . import security
 from .exceptions import InvalidParameterError
 
 logging.basicConfig(
@@ -36,7 +40,7 @@ def resolve_user_did(username: str) -> str:
     """
     # Resolve the users DID
     try:
-        user_did = atproto_oauth_authn.resolve_identity(username)
+        user_did = resolve_identity(username)
     except Exception as e:
         logging.error("Failed to resolve username %s to a DID: %s", username, e)
         raise
@@ -45,14 +49,14 @@ def resolve_user_did(username: str) -> str:
 
     # Retrieve the user DID document
     try:
-        did_document = atproto_oauth_authn.retrieve_did_document(user_did)
+        did_document = retrieve_did_document(user_did)
     except Exception as e:
         logging.error("Failed to retrieve DID document for %s: %s", user_did, e)
         raise
 
     # Get the URL of the PDS server from the DID doc
     try:
-        pds_url = atproto_oauth_authn.extract_pds_url(did_document)
+        pds_url = extract_pds_url(did_document)
     except Exception as e:
         logging.error("Failed to extract PDS URL from DID document: %s", e)
         raise
@@ -74,14 +78,14 @@ def discover_auth_server(pds_url: str) -> Tuple[str, str, str]:
     """
     # Get the PDS server metadata from the well-known endpoint
     try:
-        pds_metadata = atproto_oauth_authn.get_pds_metadata(pds_url)
+        pds_metadata = get_pds_metadata(pds_url)
     except Exception as e:
         logging.error("Failed to retrieve PDS metadata: %s", e)
         raise
 
     # From the metadata extract the authorization server
     try:
-        auth_servers = atproto_oauth_authn.extract_auth_server(pds_metadata)
+        auth_servers = extract_auth_server(pds_metadata)
     except Exception as e:
         logging.error("Failed to extract authorization server from metadata: %s", e)
         raise
@@ -91,7 +95,7 @@ def discover_auth_server(pds_url: str) -> Tuple[str, str, str]:
     # Get the metadata of the authorization server
     try:
         auth_metadata, auth_endpoint, token_endpoint, par_endpoint = (
-            atproto_oauth_authn.get_auth_server_metadata(auth_servers)
+            get_auth_server_metadata(auth_servers)
         )
     except Exception as e:
         logging.error("Failed to retrieve auth server metadata: %s", e)
@@ -118,7 +122,7 @@ def generate_oauth_params() -> Tuple[str, str, str]:
     """
     # Generate a state parameter for OAuth request
     try:
-        oauth_state = atproto_oauth_authn.generate_oauth_state()
+        oauth_state = generate_oauth_state()
     except Exception as e:
         logging.error("Failed to generate the oauth request: %s", e)
         raise
@@ -127,7 +131,7 @@ def generate_oauth_params() -> Tuple[str, str, str]:
 
     # Generate a code_verifier for PKCE
     try:
-        code_verifier = atproto_oauth_authn.generate_code_verifier(48)
+        code_verifier = generate_code_verifier(48)
     except Exception as e:
         logging.error("Failed to generate code verifier: %s", e)
         raise
@@ -136,7 +140,7 @@ def generate_oauth_params() -> Tuple[str, str, str]:
 
     # Generate a code_challenge from the code_verifier
     try:
-        code_challenge = atproto_oauth_authn.generate_code_challenge(code_verifier)
+        code_challenge = generate_code_challenge(code_verifier)
     except Exception as e:
         logging.error("Failed to generate code challenge: %s", e)
         raise
@@ -222,7 +226,7 @@ def perform_par_request(context: PARRequestContext) -> Tuple[str, int]:
     )
     # Use the username as login_hint if available
     try:
-        request_uri, expires_in = atproto_oauth_authn.send_par_request(
+        request_uri, expires_in = send_par_request(
             context=context,
         )
     except Exception as e:
@@ -276,7 +280,7 @@ def get_authn_url(username: str, app_url: str) -> str:
         {"client_id": client_id, "request_uri": request_uri}
     )
     auth_url = f"{auth_endpoint}?{qparam}"
-    assert atproto_oauth_authn.security.is_safe_url(auth_url)
+    assert security.is_safe_url(auth_url)
 
     logging.debug("\nAuthorization URL:")
     logging.debug(
