@@ -12,6 +12,7 @@ from atproto_oauth_authn.oauth import (
     _send_http_request,
     _process_par_response,
 )
+from atproto_oauth_authn.authn import PARRequestContext
 from atproto_oauth_authn.exceptions import OauthFlowError, InvalidParameterError
 
 
@@ -155,14 +156,17 @@ def test_send_par_request_success(mock_safe_url, mock_post):
     mock_response.raise_for_status.return_value = None
     mock_post.return_value = mock_response
 
-    result = send_par_request(
+    context = PARRequestContext(
         par_endpoint="https://auth.example.com/par",
         code_challenge="challenge123",
-        state="state123",
-        login_hint="user.example.com",
+        oauth_state="state123",
+        username="user.example.com",
         client_id="client123",
         redirect_uri="https://app.example.com/callback",
+        app_url="app.example.com"
     )
+
+    result = send_par_request(context)
 
     assert result == ("urn:ietf:params:oauth:request_uri:example", 60)
     mock_post.assert_called_once()
@@ -171,9 +175,12 @@ def test_send_par_request_success(mock_safe_url, mock_post):
 def test_send_par_request_missing_params():
     """Test error handling for missing required parameters."""
     with pytest.raises(InvalidParameterError):
-        send_par_request(
+        PARRequestContext(
             par_endpoint="https://auth.example.com/par",
             code_challenge="challenge123",
-            state="state123",
-            # Missing client_id and redirect_uri
+            oauth_state="state123",
+            username="user.example.com",
+            client_id="",  # Empty client_id should trigger validation error
+            redirect_uri="https://app.example.com/callback",
+            app_url="app.example.com"
         )
