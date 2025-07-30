@@ -62,6 +62,7 @@ def is_safe_url(url: str) -> bool:
         hostname = parsed.netloc.split(":")[0]
         
         # Handle IPv6 addresses in brackets
+        original_hostname = hostname
         if hostname.startswith('[') and hostname.endswith(']'):
             hostname = hostname[1:-1]  # Remove brackets
         
@@ -73,9 +74,15 @@ def is_safe_url(url: str) -> bool:
                 )
                 logger.warning(error_msg)
                 raise SecurityError(error_msg)
+            # If we get here, it's a valid public IP address, but we still reject it
+            # for security reasons (only allow known domains)
+            error_msg = f"SSRF protection: Rejected public IP address: {url}"
+            logger.warning(error_msg)
+            raise SecurityError(error_msg)
         except ValueError:
             # Not an IP address, continue with hostname checks
-            pass
+            # Use original hostname for further checks
+            hostname = original_hostname
 
         # Reject localhost and common internal hostnames
         if (
