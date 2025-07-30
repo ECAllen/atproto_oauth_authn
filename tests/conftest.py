@@ -39,7 +39,17 @@ def mock_response():
         def raise_for_status(self):
             """Raise an exception if status code indicates an error."""
             if self.status_code >= 400:
-                raise requests.HTTPError(f"HTTP Error: {self.status_code}")
+                # Create a mock response object that httpx.HTTPStatusError expects
+                mock_response = type('MockResponse', (), {
+                    'status_code': self.status_code,
+                    'text': self.text,
+                    'content': self.content
+                })()
+                raise httpx.HTTPStatusError(
+                    f"HTTP Error: {self.status_code}", 
+                    request=None, 
+                    response=mock_response
+                )
             return self
 
     return MockResponse
