@@ -107,12 +107,10 @@ def is_safe_url(url: str) -> bool:
             if potential_domain in KNOWN_AT_PROTOCOL_DOMAINS:
                 return True
 
-        # For domains not in the whitelist, log a warning but still allow if other checks passed
-        logger.warning(
-            "SSRF protection: URL hostname not in AT Protocol whitelist: %s", hostname
-        )
-
-        return True
+        # For domains not in the whitelist, reject the URL
+        error_msg = f"SSRF protection: URL hostname not in AT Protocol whitelist: {hostname}"
+        logger.warning(error_msg)
+        raise SecurityError(error_msg)
     except SecurityError:
         # Re-raise security errors
         raise
