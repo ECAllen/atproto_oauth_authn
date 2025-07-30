@@ -8,12 +8,13 @@ from typing import Dict, Any
 @pytest.fixture
 def mock_response():
     """Create a mock response object with customizable status code and json content."""
+
     class MockResponse:
         def __init__(self, json_data, status_code=200):
             self.json_data = json_data
             self.status_code = status_code
             self.text = json.dumps(json_data)
-            self.content = json.dumps(json_data).encode('utf-8')
+            self.content = json.dumps(json_data).encode("utf-8")
 
         def json(self):
             return self.json_data
@@ -36,9 +37,9 @@ def sample_did_document() -> Dict[str, Any]:
             {
                 "id": "#atproto_pds",
                 "type": "AtprotoPersonalDataServer",
-                "serviceEndpoint": "https://example.pds.com"
+                "serviceEndpoint": "https://example.pds.com",
             }
-        ]
+        ],
     }
 
 
@@ -50,16 +51,16 @@ def sample_pds_metadata() -> Dict[str, Any]:
         "availableUserDomains": ["example.com"],
         "links": {
             "termsOfService": "https://example.com/tos",
-            "privacyPolicy": "https://example.com/privacy"
+            "privacyPolicy": "https://example.com/privacy",
         },
         "auth": {
             "oauth2": {
                 "authorization_endpoint": "https://auth.example.com/authorize",
                 "token_endpoint": "https://auth.example.com/token",
                 "par_endpoint": "https://auth.example.com/par",
-                "revocation_endpoint": "https://auth.example.com/revoke"
+                "revocation_endpoint": "https://auth.example.com/revoke",
             }
-        }
+        },
     }
 
 
@@ -74,5 +75,5 @@ def sample_auth_server_metadata() -> Dict[str, Any]:
         "revocation_endpoint": "https://auth.example.com/revoke",
         "scopes_supported": ["atproto", "transition:generic"],
         "response_types_supported": ["code"],
-        "grant_types_supported": ["authorization_code", "refresh_token"]
+        "grant_types_supported": ["authorization_code", "refresh_token"],
     }
