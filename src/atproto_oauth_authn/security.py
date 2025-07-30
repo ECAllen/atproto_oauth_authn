@@ -60,6 +60,11 @@ def is_safe_url(url: str) -> bool:
 
         # Check for private IP ranges or localhost
         hostname = parsed.netloc.split(":")[0]
+        
+        # Handle IPv6 addresses in brackets
+        if hostname.startswith('[') and hostname.endswith(']'):
+            hostname = hostname[1:-1]  # Remove brackets
+        
         try:
             ip = ipaddress.ip_address(hostname)
             if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_unspecified:
