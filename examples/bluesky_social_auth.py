@@ -23,8 +23,8 @@ automatically open your browser to complete the authentication.
 import logging
 import os
 import webbrowser
-import atproto_oauth_authn
 from dotenv import load_dotenv
+import atproto_oauth_authn
 
 
 # Set up logging configuration
@@ -42,14 +42,14 @@ logger = logging.getLogger(__name__)
 def main() -> bool:
     """
     Main function to initiate Bluesky OAuth authentication flow.
-    
+
     Loads environment variables, validates required parameters, and opens
     the OAuth authentication URL in the user's default web browser.
-    
+
     Returns:
         bool: True if the OAuth flow was successfully initiated, False if
               required environment variables are missing or other errors occur.
-    
+
     Environment Variables Required:
         USERNAME: Bluesky handle or DID to authenticate
         APP_URL: Application URL for OAuth callbacks

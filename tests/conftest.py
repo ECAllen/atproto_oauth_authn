@@ -1,9 +1,9 @@
 """Pytest configuration and fixtures for atproto-oauth-authn tests."""
 
+from typing import Dict, Any
 import json
 import pytest
 import requests
-from typing import Dict, Any
 
 
 @pytest.fixture

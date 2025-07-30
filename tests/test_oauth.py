@@ -163,7 +163,7 @@ def test_send_par_request_success(mock_safe_url, mock_post):
         username="user.example.com",
         client_id="client123",
         redirect_uri="https://app.example.com/callback",
-        app_url="app.example.com"
+        app_url="app.example.com",
     )
 
     result = send_par_request(context)
@@ -182,5 +182,5 @@ def test_send_par_request_missing_params():
             username="user.example.com",
             client_id="",  # Empty client_id should trigger validation error
             redirect_uri="https://app.example.com/callback",
-            app_url="app.example.com"
+            app_url="app.example.com",
         )
