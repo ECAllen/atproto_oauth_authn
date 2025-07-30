@@ -11,7 +11,12 @@ from dataclasses import dataclass
 from .identity import resolve_identity
 from .did import retrieve_did_document, extract_pds_url
 from .metadata import get_pds_metadata, extract_auth_server, get_auth_server_metadata
-from .oauth import generate_oauth_state, generate_code_verifier, generate_code_challenge, send_par_request
+from .oauth import (
+    generate_oauth_state,
+    generate_code_verifier,
+    generate_code_challenge,
+    send_par_request,
+)
 from . import security
 from .exceptions import InvalidParameterError
 
