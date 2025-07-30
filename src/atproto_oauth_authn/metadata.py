@@ -80,15 +80,27 @@ def extract_auth_server(metadata: Dict[str, Any]) -> List[str]:
         logger.error(error_msg)
         raise MetadataError(error_msg)
 
+    # Look for authorization_servers field first (standard OAuth metadata)
     auth_servers = metadata.get("authorization_servers")
-    if not auth_servers or not isinstance(auth_servers, list) or len(auth_servers) == 0:
-        error_msg = "No authorization servers found in metadata"
-        logger.error(error_msg)
-        raise MetadataError(error_msg)
+    if auth_servers and isinstance(auth_servers, list) and len(auth_servers) > 0:
+        logger.info("Found authorization servers: %s", auth_servers)
+        return auth_servers
 
-    # Return the list of authorization servers
-    logger.info("Found authorization servers: %s", auth_servers)
-    return auth_servers
+    # Fall back to extracting from auth.oauth2 structure (AT Protocol specific)
+    auth_config = metadata.get("auth", {}).get("oauth2", {})
+    if auth_config:
+        auth_endpoint = auth_config.get("authorization_endpoint")
+        if auth_endpoint:
+            # Extract the base URL from the authorization endpoint
+            from urllib.parse import urlparse
+            parsed = urlparse(auth_endpoint)
+            auth_server = f"{parsed.scheme}://{parsed.netloc}"
+            logger.info("Extracted authorization server from auth config: %s", auth_server)
+            return [auth_server]
+
+    error_msg = "No authorization servers found in metadata"
+    logger.error(error_msg)
+    raise MetadataError(error_msg)
 
 
 def _fetch_single_auth_server_metadata(
