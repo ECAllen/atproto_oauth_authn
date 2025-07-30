@@ -86,14 +86,22 @@ def extract_pds_url(did_document: Dict[str, Any]) -> str:
     if not did_document:
         raise DidDocumentError("DID document cannot be empty")
 
-    # Extract the PDS URL from the DID document
-    if "service" in did_document and len(did_document["service"]) > 0:
-        pds_url = did_document["service"][0].get("serviceEndpoint")
-        if pds_url:
-            logger.info("Extracted PDS URL: %s", pds_url)
-            return pds_url
+    # Check if services exist
+    services = did_document.get("service", [])
+    if not services:
+        error_msg = "Could not find PDS URL in DID document: no services found"
+        logger.warning(error_msg)
+        raise DidDocumentError(error_msg)
 
-    error_msg = "Could not find PDS URL in DID document"
+    # Look for AtprotoPersonalDataServer service
+    for service in services:
+        if service.get("type") == "AtprotoPersonalDataServer":
+            pds_url = service.get("serviceEndpoint")
+            if pds_url:
+                logger.info("Extracted PDS URL: %s", pds_url)
+                return pds_url
+
+    error_msg = "Could not find PDS URL in DID document: no AtprotoPersonalDataServer service found"
     logger.warning(error_msg)
     raise DidDocumentError(error_msg)
 
