@@ -39,7 +39,7 @@ def build_auth_url(auth_endpoint: str, client_id: str, request_uri: str) -> str:
         raise InvalidParameterError(error_msg)
 
     client_id_enc = urllib.parse.quote(client_id, safe="")
-    request_uri_enc = urllib.parse.quote(request_uri)
+    request_uri_enc = urllib.parse.quote(request_uri, safe="")
     auth_url = (
         f"{auth_endpoint}?client_id={client_id_enc}&request_uri={request_uri_enc}"
     )
