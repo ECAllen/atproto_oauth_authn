@@ -1,8 +1,9 @@
 """Tests for security functions."""
 
+import pytest
+
 from atproto_oauth_authn.security import is_safe_url, KNOWN_AT_PROTOCOL_DOMAINS
 from atproto_oauth_authn.exceptions import SecurityError
-import pytest
 
 
 def test_is_safe_url_with_known_domains():
