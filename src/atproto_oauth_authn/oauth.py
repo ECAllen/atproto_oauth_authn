@@ -5,7 +5,8 @@ import secrets
 import base64
 import hashlib
 import json
-from typing import Tuple
+from typing import Tuple, Optional, Dict, Any
+from dataclasses import dataclass
 
 # Forward reference for PARRequestContext
 from typing import TYPE_CHECKING
@@ -21,6 +22,65 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PARRequest:
+    """Data class for Pushed Authorization Request parameters."""
+    
+    par_endpoint: str
+    code_challenge: str
+    state: str
+    client_id: str
+    redirect_uri: str
+    login_hint: Optional[str] = None
+    
+    def validate(self) -> None:
+        """Validate that all required parameters are present."""
+        if not self.par_endpoint:
+            raise InvalidParameterError("PAR endpoint is required")
+        if not self.code_challenge:
+            raise InvalidParameterError("code_challenge is required")
+        if not self.state:
+            raise InvalidParameterError("state is required")
+        if not self.client_id:
+            raise InvalidParameterError("client_id is required")
+        if not self.redirect_uri:
+            raise InvalidParameterError("redirect_uri is required")
+    
+    def to_form_params(self) -> Dict[str, Any]:
+        """Convert to form parameters for PAR request."""
+        params = {
+            "response_type": "code",
+            "code_challenge_method": "S256",
+            "scope": "atproto transition:generic",
+            "client_id": self.client_id,
+            "redirect_uri": self.redirect_uri,
+            "code_challenge": self.code_challenge,
+            "state": self.state,
+        }
+        
+        if self.login_hint:
+            params["login_hint"] = self.login_hint
+            
+        return params
+
+
+def _send_http_request(url: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """Send HTTP request and return JSON response."""
+    response = httpx.post(url, data=params)
+    response.raise_for_status()
+    return response.json()
+
+
+def _process_par_response(response_data: Dict[str, Any]) -> Tuple[str, int]:
+    """Process PAR response and extract request_uri and expires_in."""
+    request_uri = response_data.get("request_uri")
+    if not request_uri:
+        raise OauthFlowError("No request_uri found in PAR response")
+    
+    expires_in = response_data.get("expires_in", 60)  # Default to 60 seconds
+    return request_uri, expires_in
 
 
 def generate_oauth_state() -> str:

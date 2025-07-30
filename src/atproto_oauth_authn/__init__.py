@@ -32,6 +32,7 @@ from .oauth import (
     generate_code_verifier,
     generate_code_challenge,
     send_par_request,
+    PARRequest,
 )
 from .security import is_safe_url
 from .utils import build_auth_url
@@ -72,6 +73,7 @@ __all__ = [
     "generate_code_verifier",
     "generate_code_challenge",
     "send_par_request",
+    "PARRequest",
     "is_safe_url",
     "build_auth_url",
     "get_authn_url",
