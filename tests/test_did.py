@@ -11,7 +11,7 @@ from atproto_oauth_authn.did import (
 from atproto_oauth_authn.exceptions import DidDocumentError
 
 
-@patch("atproto_oauth_authn.did.requests.get")
+@patch("atproto_oauth_authn.did.httpx.get")
 def test_retrieve_did_document(mock_get, mock_response, sample_did_document):
     """Test retrieving a DID document."""
     mock_get.return_value = mock_response(sample_did_document)
@@ -21,7 +21,7 @@ def test_retrieve_did_document(mock_get, mock_response, sample_did_document):
     mock_get.assert_called_once()
 
 
-@patch("atproto_oauth_authn.did.requests.get")
+@patch("atproto_oauth_authn.did.httpx.get")
 def test_retrieve_did_document_error(mock_get, mock_response):
     """Test error handling when retrieving a DID document."""
     mock_get.return_value = mock_response({}, status_code=404)
