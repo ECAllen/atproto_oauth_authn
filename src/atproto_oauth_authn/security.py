@@ -61,14 +61,14 @@ def is_safe_url(url: str) -> bool:
         # Check for private IP ranges or localhost
         # Handle IPv6 addresses in brackets first
         netloc = parsed.netloc
-        if netloc.startswith('[') and ']' in netloc:
+        if netloc.startswith("[") and "]" in netloc:
             # IPv6 address like [::1] or [::1]:8080
-            bracket_end = netloc.find(']')
+            bracket_end = netloc.find("]")
             hostname = netloc[1:bracket_end]  # Extract IP without brackets
         else:
             # IPv4 address or hostname, split on : to remove port
             hostname = netloc.split(":")[0]
-        
+
         try:
             ip = ipaddress.ip_address(hostname)
             if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_unspecified:
@@ -85,7 +85,7 @@ def is_safe_url(url: str) -> bool:
         except ValueError:
             # Not an IP address, continue with hostname checks
             # For IPv6 bracket notation that failed IP parsing, use the netloc for hostname checks
-            if netloc.startswith('['):
+            if netloc.startswith("["):
                 hostname = netloc  # Use full netloc for further validation
             # hostname is already set correctly for IPv4/domain cases
 
