@@ -28,6 +28,85 @@ KNOWN_AT_PROTOCOL_DOMAINS: Set[str] = {
 }
 
 
+def _validate_https_protocol(parsed_url: urllib.parse.ParseResult, url: str) -> None:
+    """Validate that the URL uses HTTPS protocol."""
+    if parsed_url.scheme != "https":
+        error_msg = f"SSRF protection: Rejected non-HTTPS URL: {url}"
+        logger.warning(error_msg)
+        raise SecurityError(error_msg)
+
+
+def _extract_hostname(netloc: str) -> str:
+    """Extract hostname from netloc, handling IPv6 brackets."""
+    if netloc.startswith("[") and "]" in netloc:
+        # IPv6 address like [::1] or [::1]:8080
+        bracket_end = netloc.find("]")
+        return netloc[1:bracket_end]  # Extract IP without brackets
+    else:
+        # IPv4 address or hostname, split on : to remove port
+        return netloc.split(":")[0]
+
+
+def _validate_ip_address(hostname: str, url: str) -> bool:
+    """
+    Validate IP addresses and reject private/reserved ones.
+    
+    Returns:
+        True if hostname is an IP address (and validation passed)
+        False if hostname is not an IP address
+    """
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_unspecified:
+            error_msg = f"SSRF protection: Rejected URL with private/reserved IP: {url}"
+            logger.warning(error_msg)
+            raise SecurityError(error_msg)
+        # Reject all IP addresses for security (only allow known domains)
+        error_msg = f"SSRF protection: Rejected public IP address: {url}"
+        logger.warning(error_msg)
+        raise SecurityError(error_msg)
+    except ValueError:
+        # Not an IP address
+        return False
+
+
+def _validate_internal_hostnames(hostname: str, url: str) -> None:
+    """Validate against internal hostnames."""
+    if (
+        hostname == "localhost"
+        or hostname.endswith(".local")
+        or hostname.endswith(".internal")
+    ):
+        error_msg = f"SSRF protection: Rejected internal hostname: {url}"
+        logger.warning(error_msg)
+        raise SecurityError(error_msg)
+
+
+def _validate_numeric_ip_hostname(hostname: str, url: str) -> None:
+    """Validate numeric IP hostnames to catch unusual formats."""
+    if re.match(r"^\d+\.\d+\.\d+\.\d+$", hostname):
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_unspecified:
+                error_msg = f"SSRF protection: Rejected numeric IP hostname: {url}"
+                logger.warning(error_msg)
+                raise SecurityError(error_msg)
+        except ValueError as e:
+            error_msg = f"SSRF protection: Rejected unusual numeric hostname: {url}"
+            logger.warning(error_msg)
+            raise SecurityError(error_msg) from e
+
+
+def _check_domain_whitelist(hostname: str) -> bool:
+    """Check if hostname is in the AT Protocol domain whitelist."""
+    domain_parts = hostname.split(".")
+    for i in range(len(domain_parts) - 1):
+        potential_domain = ".".join(domain_parts[i:])
+        if potential_domain in KNOWN_AT_PROTOCOL_DOMAINS:
+            return True
+    return False
+
+
 def is_safe_url(url: str) -> bool:
     """
     Validate if a URL is safe to make a request to.
@@ -51,84 +130,37 @@ def is_safe_url(url: str) -> bool:
 
     try:
         parsed = urllib.parse.urlparse(url)
-
-        # Ensure HTTPS protocol
-        if parsed.scheme != "https":
-            error_msg = f"SSRF protection: Rejected non-HTTPS URL: {url}"
-            logger.warning(error_msg)
-            raise SecurityError(error_msg)
-
-        # Check for private IP ranges or localhost
-        # Handle IPv6 addresses in brackets first
-        netloc = parsed.netloc
-        if netloc.startswith("[") and "]" in netloc:
-            # IPv6 address like [::1] or [::1]:8080
-            bracket_end = netloc.find("]")
-            hostname = netloc[1:bracket_end]  # Extract IP without brackets
-        else:
-            # IPv4 address or hostname, split on : to remove port
-            hostname = netloc.split(":")[0]
-
-        try:
-            ip = ipaddress.ip_address(hostname)
-            if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_unspecified:
-                error_msg = (
-                    f"SSRF protection: Rejected URL with private/reserved IP: {url}"
-                )
-                logger.warning(error_msg)
-                raise SecurityError(error_msg)
-            # If we get here, it's a valid public IP address, but we still reject it
-            # for security reasons (only allow known domains)
-            error_msg = f"SSRF protection: Rejected public IP address: {url}"
-            logger.warning(error_msg)
-            raise SecurityError(error_msg)
-        except ValueError:
-            # Not an IP address, continue with hostname checks
-            # For IPv6 bracket notation that failed IP parsing, use the netloc for hostname checks
-            if netloc.startswith("["):
-                hostname = netloc  # Use full netloc for further validation
-            # hostname is already set correctly for IPv4/domain cases
-
-        # Reject localhost and common internal hostnames
-        if (
-            hostname == "localhost"
-            or hostname.endswith(".local")
-            or hostname.endswith(".internal")
-        ):
-            error_msg = f"SSRF protection: Rejected internal hostname: {url}"
-            logger.warning(error_msg)
-            raise SecurityError(error_msg)
-
-        # Check for numeric IP in hostname to catch IP literals like 0177.0.0.1
-        if re.match(r"^\d+\.\d+\.\d+\.\d+$", hostname):
-            try:
-                ip = ipaddress.ip_address(hostname)
-                if (
-                    ip.is_private
-                    or ip.is_loopback
-                    or ip.is_reserved
-                    or ip.is_unspecified
-                ):
-                    error_msg = f"SSRF protection: Rejected numeric IP hostname: {url}"
-                    logger.warning(error_msg)
-                    raise SecurityError(error_msg)
-            except ValueError as e:
-                error_msg = f"SSRF protection: Rejected unusual numeric hostname: {url}"
-                logger.warning(error_msg)
-                raise SecurityError(error_msg) from e
-
-        # Whitelist of known AT Protocol domains
-        domain_parts = hostname.split(".")
-        for i in range(len(domain_parts) - 1):
-            potential_domain = ".".join(domain_parts[i:])
-            if potential_domain in KNOWN_AT_PROTOCOL_DOMAINS:
-                return True
-
-        # For domains not in the whitelist, reject the URL
+        
+        # Validate HTTPS protocol
+        _validate_https_protocol(parsed, url)
+        
+        # Extract hostname from netloc
+        hostname = _extract_hostname(parsed.netloc)
+        
+        # Check if it's an IP address and validate it
+        if _validate_ip_address(hostname, url):
+            return True  # This won't be reached due to SecurityError in _validate_ip_address
+        
+        # For IPv6 bracket notation that failed IP parsing, use the full netloc
+        if parsed.netloc.startswith("["):
+            hostname = parsed.netloc
+        
+        # Validate against internal hostnames
+        _validate_internal_hostnames(hostname, url)
+        
+        # Check for numeric IP patterns
+        _validate_numeric_ip_hostname(hostname, url)
+        
+        # Check domain whitelist
+        if _check_domain_whitelist(hostname):
+            return True
+        
+        # Domain not in whitelist
         logger.warning(
             "SSRF protection: URL hostname not in AT Protocol whitelist: %s", hostname
         )
         return False
+        
     except SecurityError:
         # Re-raise security errors
         raise
