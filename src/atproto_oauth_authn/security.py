@@ -42,15 +42,15 @@ def _extract_hostname(netloc: str) -> str:
         # IPv6 address like [::1] or [::1]:8080
         bracket_end = netloc.find("]")
         return netloc[1:bracket_end]  # Extract IP without brackets
-    else:
-        # IPv4 address or hostname, split on : to remove port
-        return netloc.split(":")[0]
+
+    # IPv4 address or hostname, split on : to remove port
+    return netloc.split(":")[0]
 
 
 def _validate_ip_address(hostname: str, url: str) -> bool:
     """
     Validate IP addresses and reject private/reserved ones.
-    
+
     Returns:
         True if hostname is an IP address (and validation passed)
         False if hostname is not an IP address
@@ -130,37 +130,37 @@ def is_safe_url(url: str) -> bool:
 
     try:
         parsed = urllib.parse.urlparse(url)
-        
+
         # Validate HTTPS protocol
         _validate_https_protocol(parsed, url)
-        
+
         # Extract hostname from netloc
         hostname = _extract_hostname(parsed.netloc)
-        
+
         # Check if it's an IP address and validate it
         if _validate_ip_address(hostname, url):
             return True  # This won't be reached due to SecurityError in _validate_ip_address
-        
+
         # For IPv6 bracket notation that failed IP parsing, use the full netloc
         if parsed.netloc.startswith("["):
             hostname = parsed.netloc
-        
+
         # Validate against internal hostnames
         _validate_internal_hostnames(hostname, url)
-        
+
         # Check for numeric IP patterns
         _validate_numeric_ip_hostname(hostname, url)
-        
+
         # Check domain whitelist
         if _check_domain_whitelist(hostname):
             return True
-        
+
         # Domain not in whitelist
         logger.warning(
             "SSRF protection: URL hostname not in AT Protocol whitelist: %s", hostname
         )
         return False
-        
+
     except SecurityError:
         # Re-raise security errors
         raise

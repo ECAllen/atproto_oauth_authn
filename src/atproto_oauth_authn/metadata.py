@@ -3,7 +3,7 @@
 import logging
 import json
 from typing import List, Dict, Any, Tuple
-
+from urllib.parse import urlparse
 import httpx
 
 from .security import is_safe_url
@@ -92,10 +92,12 @@ def extract_auth_server(metadata: Dict[str, Any]) -> List[str]:
         auth_endpoint = auth_config.get("authorization_endpoint")
         if auth_endpoint:
             # Extract the base URL from the authorization endpoint
-            from urllib.parse import urlparse
+
             parsed = urlparse(auth_endpoint)
             auth_server = f"{parsed.scheme}://{parsed.netloc}"
-            logger.info("Extracted authorization server from auth config: %s", auth_server)
+            logger.info(
+                "Extracted authorization server from auth config: %s", auth_server
+            )
             return [auth_server]
 
     error_msg = "No authorization servers found in metadata"
