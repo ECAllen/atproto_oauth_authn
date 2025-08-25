@@ -8,6 +8,10 @@
 
 <https://github.com/bluesky-social/cookbook/tree/main/python-oauth-web-app>
 
+<https://github.com/bluesky-social/atproto/discussions/3075>
+
+<https://docs.bsky.app/blog/oauth-atproto>
+
 ## Steps
 
 1) get users handle from form
@@ -104,11 +108,8 @@ case, this entry is: <https://bsky.social/oauth/par>
     &code_challenge=URQ-2arwHpJzNwcFPng-_IE3gRGGBN0SVoFMN7wEiWI
     &state=2e94cf77e8b0ba2209dc6dcb90018c8d044ac31cb526fc4823278585
     &login_hint=madrilenyer.bsky.social
-
 9) from the response extract the request_uri
-
 10) get the nonce from the response header
-
 ```javascript
 dpopNonce = response.headers.get( "dpop-nonce" );
 ```
@@ -154,8 +155,28 @@ code: A (one single use) code that the application needs to retrieves the user's
 
 14) use the DPOP-Proof to request the users token
 
-userTokenEndPoint(**): The server's token endpoint
 
-client_id: Let's say, the "APP_CLIENT_ID", and
+Upon successful authorization by the user, the AS will issue an authorization code and redirect the user back to the client's redirect_uri with a code.
 
-dpopNonce: To create the DPoP-Proof with a crypto key
+The client will use that code (along with PKCE), to contact the /token endpoint on the AS.
+
+POST https://entryway.example.com/oauth/token
+Content-Type: application/x-www-form-urlencoded
+DPoP: <DPOP_PROOF_JWT>
+
+grant_type=authorization_code
+&code=<AUTHORIZATION_CODE>
+&code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
+&client_id=https%3A%2F%2Fapp.example.com%2Fclient-metadata.json
+&redirect_uri=https%3A%2F%2Fapp.example.com%2Fmy-app%2Foauth-callback
+
+HTTP/1.1 200 OK
+Content-Type: application/json
+Cache-Control: no-store
+
+{
+ "access_token": "Kz~8mXK1EalYznwH-LC-1fBAo.4Ljp~zsPE_NeO.gxU",
+ "token_type": "DPoP",
+ "expires_in": 2677,
+ "refresh_token": "Q..Zkm29lexi8VnWg2zPW1x-tgGad0Ibc3s3EwM_Ni4-g"
+}
