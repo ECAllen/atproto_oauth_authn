@@ -6,7 +6,7 @@ import json
 
 import httpx
 
-from .security import is_safe_url
+from .security import valid_url
 from .exceptions import IdentityResolutionError, SecurityError
 
 logger = logging.getLogger(__name__)
@@ -54,9 +54,9 @@ def resolve_identity(username: str) -> str:
 
         # Check URL for SSRF vulnerabilities
         try:
-            is_safe_url(url)
-        except SecurityError:
-            logger.error("Security check failed for URL: %s", url)
+            valid_url(url)
+        except ValidationError:
+            logger.error("ValidationError check failed for URL: %s", url)
             raise
 
         # Make HTTP request to resolve handle to DID

@@ -22,19 +22,12 @@ Example usage:
 import logging
 from .identity import resolve_identity
 from .did import get_did_document, retrieve_did_document, extract_pds_url
-from .metadata import (
-    get_pds_metadata,
-    extract_auth_server,
-    get_auth_server_metadata,
-)
 from .oauth import (
     generate_oauth_state,
-    generate_code_verifier,
     generate_code_challenge,
     send_par_request,
-    PARRequest,
 )
-from .security import is_safe_url
+from .security import valid_url
 from .utils import build_auth_url
 from .exceptions import (
     AtprotoOauthError,

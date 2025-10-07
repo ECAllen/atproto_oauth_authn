@@ -6,7 +6,7 @@ from typing import Tuple, Dict, Any
 
 import httpx
 
-from .security import is_safe_url
+from .security import valid_url
 from .exceptions import DidDocumentError, SecurityError
 
 logger = logging.getLogger(__name__)
@@ -33,9 +33,9 @@ def retrieve_did_document(did: str) -> Dict[str, Any]:
 
     # Check URL for SSRF vulnerabilities
     try:
-        is_safe_url(url)
+        valide_url(url)
     except SecurityError:
-        logger.error("Security check failed for URL: %s", url)
+        logger.error("ValidationError check failed for URL: %s", url)
         raise
 
     try:

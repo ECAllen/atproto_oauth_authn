@@ -1,67 +1,404 @@
 """OAuth functionality for AT Protocol."""
 
 import logging
+40
 import secrets
 import base64
 import hashlib
 import json
-from typing import Tuple, Optional, Dict, Any, TYPE_CHECKING
-from dataclasses import dataclass
+import time
+from typing import List, Tuple, Optional, Dict, Any, TYPE_CHECKING
+from dataclasses import dataclass,asdict
 
 import httpx
 
-from .security import is_safe_url
+from .security import valid_url
+
 from .exceptions import OauthFlowError, SecurityError, InvalidParameterError
 
+from joserfc.jwk import ECKey
+from authlib.common.security import generate_token
+from joserfc import jwt
+from joserfc.jwk import ECKey
 
 if TYPE_CHECKING:
     from .authn import PARRequestContext
 
+import validators
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class PARRequest:
-    """Data class for Pushed Authorization Request parameters."""
-
+class PARRequestContext:
+    """Context for performing a PAR request with all necessary parameters."""
     par_endpoint: str
+    response_type: str
     code_challenge: str
+    code_challenge_method: str    
     state: str
     client_id: str
     redirect_uri: str
-    login_hint: Optional[str] = None
+    scope: str
+    client_assertion_type: str | None = None
+    client_assertion: str | None = None
+    login_hint: str | None = None
+    app_url: str | None = None
+    dpop_proof: str | None = None
+    dpop_private_jwk: ECKey | None = None
 
-    def validate(self) -> None:
-        """Validate that all required parameters are present."""
-        if not self.par_endpoint:
-            raise InvalidParameterError("PAR endpoint is required")
+
+    def __post_init__(self):
+        """Validate required parameters after initialization."""
+        if not self.response_type:
+            raise InvalidParameterError("response_type is required")
         if not self.code_challenge:
             raise InvalidParameterError("code_challenge is required")
-        if not self.state:
-            raise InvalidParameterError("state is required")
         if not self.client_id:
             raise InvalidParameterError("client_id is required")
         if not self.redirect_uri:
             raise InvalidParameterError("redirect_uri is required")
+        if not self.scope:
+            raise InvalidParameterError("scope is required")
 
-    def to_form_params(self) -> Dict[str, Any]:
-        """Convert to form parameters for PAR request."""
-        params = {
-            "response_type": "code",
-            "code_challenge_method": "S256",
-            "scope": "atproto transition:generic",
-            "client_id": self.client_id,
-            "redirect_uri": self.redirect_uri,
+    def par_request_body(self):
+        return {
+            "response_type": self.response_type,
             "code_challenge": self.code_challenge,
+            "code_challenge_method": self.code_challenge_method,
+            "client_id": self.client_id,
             "state": self.state,
+            "redirect_uri": self.redirect_uri,
+            "scope": self.scope,
+            "client_assertion_type": self.client_assertion_type,
+            "client_assertion": self.client_assertion,
         }
 
-        if self.login_hint:
-            params["login_hint"] = self.login_hint
+def get_pds_metadata(pds_url: str) -> Dict[str, Any]:
+    """
+    Retrieve the OAuth protected resource metadata from the PDS server.
 
-        return params
+    Args:
+        pds_url: The URL of the PDS server
 
+    Returns:
+        The metadata as a dictionary
+
+    Raises:
+        MetadataError: If the metadata cannot be retrieved or parsed
+        SecurityError: If there's a security issue with the URL
+    """
+    if not pds_url:
+        error_msg = "Cannot get PDS metadata: PDS URL is None"
+        logger.error(error_msg)
+        raise MetadataError(error_msg)
+
+    metadata_url = f"{pds_url.rstrip('/')}/.well-known/oauth-protected-resource"
+    logger.info("Fetching PDS metadata from: %s", metadata_url)
+
+    # Check URL for SSRF vulnerabilities
+    try:
+        is_safe_url(metadata_url)
+    except SecurityError:
+        logger.error("Security check failed for URL: %s", metadata_url)
+        raise
+
+    try:
+        response = httpx.get(metadata_url)
+        response.raise_for_status()
+
+        metadata = response.json()
+        logger.info("Successfully retrieved PDS metadata")
+        return metadata
+    except httpx.HTTPStatusError as e:
+        error_msg = f"HTTP error occurred while retrieving PDS metadata: {e}"
+        logger.error(error_msg)
+        raise MetadataError(error_msg) from e
+    except httpx.RequestError as e:
+        error_msg = f"Request error occurred while retrieving PDS metadata: {e}"
+        logger.error(error_msg)
+        raise MetadataError(error_msg) from e
+    except json.JSONDecodeError as e:
+        error_msg = "Failed to parse JSON response from PDS metadata retrieval"
+        logger.error(error_msg)
+        raise MetadataError(error_msg) from e
+
+
+def extract_auth_server(metadata: Dict[str, Any]) -> List[str]:
+    """
+    Extract the authorization server URL from the PDS metadata.
+
+    Args:
+        metadata: The PDS metadata dictionary
+
+    Returns:
+        The list of authorization server URLs
+
+    Raises:
+        MetadataError: If no authorization servers can be found
+    """
+    if not metadata:
+        error_msg = "Cannot extract authorization server: Metadata is None"
+        logger.error(error_msg)
+        raise MetadataError(error_msg)
+
+    # Look for authorization_servers field first (standard OAuth metadata)
+    auth_servers = metadata.get("authorization_servers")
+    if auth_servers and isinstance(auth_servers, list) and len(auth_servers) > 0:
+        logger.info("Found authorization servers: %s", auth_servers)
+        return auth_servers
+
+    # Fall back to extracting from auth.oauth2 structure (AT Protocol specific)
+    auth_config = metadata.get("auth", {}).get("oauth2", {})
+    if auth_config:
+        auth_endpoint = auth_config.get("authorization_endpoint")
+        if auth_endpoint:
+            # Extract the base URL from the authorization endpoint
+
+            parsed = urlparse(auth_endpoint)
+            auth_server = f"{parsed.scheme}://{parsed.netloc}"
+            logger.info(
+                "Extracted authorization server from auth config: %s", auth_server
+            )
+            return [auth_server]
+
+    error_msg = "No authorization servers found in metadata"
+    logger.error(error_msg)
+    raise MetadataError(error_msg)
+
+
+def _fetch_single_auth_server_metadata(
+    auth_server: str,
+) -> Tuple[Dict[str, Any], str, str, str]:
+    """Fetch metadata from a single auth server."""
+    metadata_url = f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
+    logger.info("Trying to fetch auth server metadata from: %s", metadata_url)
+
+    # Check URL for SSRF vulnerabilities
+    is_safe_url(metadata_url)  # Raises SecurityError if unsafe
+
+    response = httpx.get(metadata_url)
+    response.raise_for_status()
+
+    metadata = response.json()
+    logger.info("Successfully retrieved auth server metadata from %s", auth_server)
+
+    return _extract_endpoints_from_metadata(metadata, auth_server)
+
+
+def _extract_endpoints_from_metadata(
+    metadata: Dict[str, Any], auth_server: str
+) -> Tuple[Dict[str, Any], str, str, str]:
+    """Extract and validate endpoints from metadata."""
+    auth_endpoint = metadata.get("authorization_endpoint")
+    token_endpoint = metadata.get("token_endpoint")
+    par_endpoint = metadata.get("pushed_authorization_request_endpoint")
+
+    if not auth_endpoint or not token_endpoint:
+        error_msg = (
+            f"Missing required endpoints in auth server metadata from {auth_server}"
+        )
+        raise MetadataError(error_msg)
+
+    logger.info("Found authorization endpoint: %s", auth_endpoint)
+    logger.info("Found token endpoint: %s", token_endpoint)
+    if par_endpoint:
+        logger.info("Found PAR endpoint: %s", par_endpoint)
+    else:
+        logger.warning("PAR endpoint not found in auth server metadata")
+
+    return metadata, auth_endpoint, token_endpoint, par_endpoint
+
+
+def get_auth_server_metadata(
+    auth_servers: List[str],
+) -> dict | List[str]:
+    """
+    Retrieve the OAuth authorization server metadata from the first available server.
+
+    Args:
+        auth_servers: List of authorization server URLs
+
+    Returns:
+        A tuple containing (metadata, auth_endpoint, token_endpoint, par_endpoint)
+
+    Raises:
+        MetadataError: If metadata cannot be retrieved from any server
+        SecurityError: If there's a security issue with the URL
+    """
+    errors = []
+    if not auth_servers or not isinstance(auth_servers, list):
+        error_msg = "Cannot get auth server metadata: No authorization servers provided"
+        logger.error(error_msg)
+        raise MetadataError(error_msg)
+
+    for auth_server in auth_servers:
+        try:
+            metadata_url = f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
+            logger.info("Trying to fetch auth server metadata from: %s", metadata_url)
+
+            # Check URL for SSRF vulnerabilities
+            is_safe_url(metadata_url)  # Raises SecurityError if unsafe
+
+            response = httpx.get(metadata_url)
+            response.raise_for_status()
+
+            metadata = response.json()
+            logger.info("Successfully retrieved auth server metadata from %s", auth_server)
+            return metadata
+        except Exception as e:
+            error_msg = (
+                "HTTP error occurred while retrieving auth server metadata "
+                f"from {auth_server}: {e}"
+            )
+            logger.warning(error_msg)
+            errors.append(error_msg)
+    
+    return errors
+
+
+
+def initial_token_request(
+    authn_metadata: dict,
+    code: str,
+    app_url: str,
+    client_secret_jwk: ECKey,
+) -> Tuple[dict, str]:
+ 
+    authserver_url = authn_metadata["authserver_iss"]
+
+    #TODO is this necessary?
+    # Re-fetch server metadata
+    authserver_meta = get_auth_server_metadata([authserver_url])
+
+    # Construct auth token request fields
+    client_id = f"{app_url}/oauth/client-metadata.json"
+    redirect_uri = f"{app_url}/oauth/callback"
+
+    # Self-signed JWT using the private key declared in client metadata JWKS (confidential client)
+    client_assertion = client_assertion_jwt(
+        client_id, authserver_url, client_secret_jwk
+    )
+
+    data = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
+        "code": code,
+        "code_verifier": authn_metadata["pkce_verifier"],
+        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        "client_assertion": client_assertion,
+    }
+
+    # Create DPoP header JWT, using the existing DPoP signing key for this account/session
+    token_endpoint = authn_metadata["token_endpoint"]
+
+    dpop_private_jwk = ECKey.import_key(
+        json.loads(authn_metadata["dpop_private_jwk"])
+    )
+
+    dpop_authserver_nonce = authn_metadata["dpop_authserver_nonce"]
+    
+    dpop_proof = authserver_dpop_jwt(
+        method="POST",
+        url=token_endpoint, 
+        dpop_private_jwk=dpop_private_jwk,
+        nonce=dpop_authserver_nonce,
+    )
+
+    try:
+        valid_url(token_endpoint)
+        logging.info("✅ Token endpoint valid.")
+    except ValidationError as e:
+        logging.error(f"Token endopoint {token_endpooint} alidation error {e}")
+        raise TokenRequestError 
+
+    try:
+        with httpx.Client(timeout=10.0,follow_redirects=False,verify=True,trust_env=False) as client:
+            response = client.post(token_endpoint, headers={"DPoP": dpop_proof}, data=data)
+    except httpx.RequestError as e:
+        logger.error(f"An error occurred while requesting: {e}")
+        raise TokenRequestError 
+
+    if response.status_code == 400 and response.json()["error"] == "use_dpop_nonce":
+        dpop_nonce = response.headers["DPoP-Nonce"]
+
+        dpop_proof = authserver_dpop_jwt(
+            method="POST",
+            url=token_endpoint,
+            nonce=dpop_nonce,
+            dpop_private_jwk=dpop_private_jwk
+        )
+
+        try:
+            with httpx.Client(timeout=10.0,follow_redirects=False,verify=True,trust_env=False) as client:
+                response = client.post(token_endpoint, headers={"DPoP": dpop_proof}, data=data)
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error occurred: {e.response.status_code} - {e.response.text}") 
+            raise TokenRequestError   
+
+    response.raise_for_status()
+
+    token = response.json()
+
+    return token, dpop_nonce
+ 
+def authserver_dpop_jwt(
+    method: str, url: str, dpop_private_jwk: ECKey, nonce: str | None = None
+) -> str:
+    dpop_pub_jwk = dpop_private_jwk.as_dict(private=False)
+
+    # This should ONLY contain: kty, crv, x, y (no 'd' parameter)
+    if 'd' in dpop_pub_jwk:
+        logging.error("❌ ERROR: Private key 'd' parameter found in public JWK!")
+    else:
+        logging.info("✅ Good: No private key material in JWK")
+
+    header = {
+        "typ": "dpop+jwt",
+        "alg": "ES256",
+        "jwk": dpop_pub_jwk
+        }
+
+    body = {
+        "jti": generate_token(),
+        "htm": method,
+        "htu": url,
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 30,
+    }
+
+    if nonce:
+        body["nonce"] = nonce
+
+    dpop_proof = jwt.encode(
+        header,
+        body,
+        dpop_private_jwk,
+    )
+
+    if isinstance(dpop_proof, bytes):
+        dpop_proof = dpop_proof.decode('utf-8')
+
+
+    decoded = jwt.decode(dpop_proof, dpop_private_jwk)
+    
+    return dpop_proof
+
+def client_assertion_jwt(
+    client_id: str, auth_endpoint: str, client_secret_jwk: ECKey
+) -> str:
+    header = {"alg": "ES256", "kid": client_secret_jwk["kid"]}
+    claims = {
+        "iss": client_id,
+        "sub": client_id,
+        "aud": auth_endpoint,
+        "jti": generate_token(),
+        "iat": int(time.time()),
+    }
+    client_assertion = jwt.encode(header, claims, client_secret_jwk)
+    
+    return client_assertion
 
 def _send_http_request(url: str, params: Dict[str, Any]) -> Dict[str, Any]:
     """Send HTTP request and return JSON response."""
@@ -99,42 +436,42 @@ def generate_oauth_state() -> str:
     return state
 
 
-def generate_code_verifier(length: int = 128) -> str:
-    """
-    Generate a code_verifier for PKCE (Proof Key for Code Exchange) in OAuth.
+# def generate_code_verifier(length: int = 128) -> str:
+#     """
+#     Generate a code_verifier for PKCE (Proof Key for Code Exchange) in OAuth.
 
-    The code_verifier is:
-    - A cryptographically random string between 43 and 128 characters
-    - Contains only unreserved URL characters: A-Z, a-z, 0-9, hyphen (-),
-      period (.), underscore (_), and tilde (~)
+#     The code_verifier is:
+#     - A cryptographically random string between 43 and 128 characters
+#     - Contains only unreserved URL characters: A-Z, a-z, 0-9, hyphen (-),
+#       period (.), underscore (_), and tilde (~)
 
-    Args:
-        length: Length of the code verifier (default: 128)
-               Must be between 43 and 128 characters
+#     Args:
+#         length: Length of the code verifier (default: 128)
+#                Must be between 43 and 128 characters
 
-    Returns:
-        A secure random string to use as the code_verifier parameter
+#     Returns:
+#         A secure random string to use as the code_verifier parameter
 
-    Raises:
-        InvalidParameterError: If the length is not between 43 and 128
-    """
-    if length < 43 or length > 128:
-        error_msg = "Code verifier length must be between 43 and 128 characters"
-        logger.error(error_msg)
-        raise InvalidParameterError(error_msg)
+#     Raises:
+#         InvalidParameterError: If the length is not between 43 and 128
+#     """
+#     if length < 43 or length > 128:
+#         error_msg = "Code verifier length must be between 43 and 128 characters"
+#         logger.error(error_msg)
+#         raise InvalidParameterError(error_msg)
 
-    # Generate random bytes and convert to base64
-    # Generate random bytes (3/4 of the desired length to account for base64 expansion)
-    random_bytes = secrets.token_bytes(length * 3 // 4)
+#     # Generate random bytes and convert to base64
+#     # Generate random bytes (3/4 of the desired length to account for base64 expansion)
+#     random_bytes = secrets.token_bytes(length * 3 // 4)
 
-    # Convert to base64 and remove padding
-    code_verifier = base64.urlsafe_b64encode(random_bytes).decode("utf-8").rstrip("=")
+#     # Convert to base64 and remove padding
+#     code_verifier = base64.urlsafe_b64encode(random_bytes).decode("utf-8").rstrip("=")
 
-    # Trim to desired length
-    code_verifier = code_verifier[:length]
+#     # Trim to desired length
+#     code_verifier = code_verifier[:length]
 
-    logger.info("Generated code_verifier (%d characters)", len(code_verifier))
-    return code_verifier
+#     logger.info("Generated code_verifier (%d characters)", len(code_verifier))
+#     return code_verifier
 
 
 def generate_code_challenge(code_verifier: str) -> str:
@@ -163,9 +500,8 @@ def generate_code_challenge(code_verifier: str) -> str:
 
 
 def send_par_request(
-    context: "PARRequestContext",
-    scope: str = "atproto transition:generic",
-) -> Tuple[str, int]:
+    context: PARRequestContext,
+) -> Tuple[str, Any]:
     """
     Send a Pushed Authorization Request (PAR) to the authorization server.
 
@@ -181,25 +517,9 @@ def send_par_request(
         SecurityError: If there's a security issue with the URL
         InvalidParameterError: If required parameters are missing (via context validation)
     """
-    # Parameter validation is now handled by PARRequestContext.__post_init__
-
-    # Prepare the request parameters
-    params = {
-        "response_type": "code",
-        "code_challenge_method": "S256",
-        "scope": scope,
-        "client_id": context.client_id,
-        "redirect_uri": context.redirect_uri,
-        "code_challenge": context.code_challenge,
-        "state": context.oauth_state,
-    }
-
-    # Add login_hint if provided
-    if context.username:
-        params["login_hint"] = context.username
 
     logger.info("Sending PAR request to: %s", context.par_endpoint)
-    logger.debug("PAR request parameters: %s", params)
+    logger.debug("PAR request parameters: %s", context)
 
     # Check URL for SSRF vulnerabilities
     try:
@@ -212,13 +532,43 @@ def send_par_request(
         # Send the POST request with form-encoded body
         response = httpx.post(
             context.par_endpoint,
-            data=params,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "DPoP": context.dpop_proof,
+            },
+            data=context.par_request_body(),
         )
-        response.raise_for_status()
+        # response.raise_for_status()
+        
+        if response.status_code == 400 and response.json()["error"] == "use_dpop_nonce":
+            dpop_authserver_nonce = response.headers["DPoP-Nonce"]
+            print(f"retrying with new auth server DPoP nonce: {dpop_authserver_nonce}")
+            dpop_proof = authserver_dpop_jwt(
+                method="POST", url=context.par_endpoint, nonce=dpop_authserver_nonce, dpop_private_jwk=context.dpop_private_jwk
+            )
+
+            response = httpx.post(
+                context.par_endpoint,
+                headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "DPoP": dpop_proof,
+                },
+                data=context.par_request_body(),
+            )
+            # with hardened_http.get_session() as sess:
+            #     resp = sess.post(
+            #         par_url,
+            #         headers={
+            #             "Content-Type": "application/x-www-form-urlencoded",
+            #             "DPoP": dpop_proof,
+            #         },
+            #         data=par_body,
+            # )
 
         # Parse the JSON response
         data = response.json()
         logger.info("PAR request successful")
+        logger.info(f"{data}")
 
         # Extract the request_uri and expires_in values
         request_uri = data.get("request_uri")
@@ -227,7 +577,7 @@ def send_par_request(
         if request_uri:
             logger.info("Received request_uri: %s", request_uri)
             logger.info("Request URI expires in: %s seconds", expires_in)
-            return request_uri, expires_in
+            return dpop_authserver_nonce, response
 
         error_msg = "No request_uri found in PAR response"
         logger.error(error_msg)

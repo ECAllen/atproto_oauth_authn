@@ -21,10 +21,16 @@ automatically open your browser to complete the authentication.
 """
 
 import logging
+import time
 import os
+import sys
 import webbrowser
+import json
 from dotenv import load_dotenv
 import atproto_oauth_authn
+from joserfc.jwk import ECKey
+import urllib.parse
+# from . import security
 
 
 # Set up logging configuration
@@ -56,6 +62,19 @@ def main() -> bool:
     """
     load_dotenv()
 
+    # This is a "confidential" OAuth client, meaning it has access 
+    # to a persistent secret signing key. parse that key as a global.
+    env_key = os.getenv("CLIENT_SECRET_JWK")
+    if env_key is None:
+        logging.error("CLIENT_SECRET_JWK not set, please generate with the generate_jwk.py and add into .env")
+        sys.exit(1)
+
+    jwk_key = json.loads(env_key)
+    CLIENT_SECRET_JWK = ECKey.import_key(jwk_key)
+
+    # Create the public key dict
+    public_key = CLIENT_SECRET_JWK.as_dict(private=False)
+
     username = os.getenv("USERNAME")
     if not username:
         logger.error("Missing USERNAME environment variable")
@@ -70,9 +89,27 @@ def main() -> bool:
 
     logging.info("Starting OAuth flow for username: %s", username)
 
-    authn_url = atproto_oauth_authn.authn.get_authn_url(
-        username=username, app_url=app_url
+    # Generate DPoP private signing key for early binding during the PAR request.
+    now = int(time.time())
+    parameters = {"kid": f"dpop-par-request-{now}"}
+    dpop_private_jwk  = ECKey.generate_key(
+        'P-256', parameters=parameters)
+
+    scope = "atproto transition:generic"
+
+    code_verifier, state, dpop_nonce, response, auth_server_metadata, user_did, pds_url, client_id = atproto_oauth_authn.get_authn_url(username, app_url, client_secret_jwk=CLIENT_SECRET_JWK, dpop_private_jwk=dpop_private_jwk)
+
+    request_uri = response['request_uri']
+    auth_endpoint = auth_server_metadata["authorization_endpoint"]
+
+    # Build final auth URL
+    qparam = urllib.parse.urlencode(
+        {"client_id": client_id, "request_uri": request_uri}
     )
+    authn_url = f"{auth_endpoint}?{qparam}"
+
+    assert atproto_oauth_authn.security.is_safe_url(authn_url)
+
     # Open the browser with the authorization URL
     webbrowser.open(authn_url)
 

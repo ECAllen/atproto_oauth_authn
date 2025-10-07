@@ -3,10 +3,11 @@
 import logging
 import re
 import ipaddress
-import urllib.parse
 from typing import Set
 
-from .exceptions import SecurityError
+import validators
+from validators.utils import validator
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -27,76 +28,21 @@ KNOWN_AT_PROTOCOL_DOMAINS: Set[str] = {
     # Add more known domains as needed
 }
 
-
-def _validate_https_protocol(parsed_url: urllib.parse.ParseResult, url: str) -> None:
-    """Validate that the URL uses HTTPS protocol."""
-    if parsed_url.scheme != "https":
-        error_msg = f"SSRF protection: Rejected non-HTTPS URL: {url}"
-        logger.warning(error_msg)
-        raise SecurityError(error_msg)
-
-
-def _extract_hostname(netloc: str) -> str:
-    """Extract hostname from netloc, handling IPv6 brackets."""
-    if netloc.startswith("[") and "]" in netloc:
-        # IPv6 address like [::1] or [::1]:8080
-        bracket_end = netloc.find("]")
-        return netloc[1:bracket_end]  # Extract IP without brackets
-
-    # IPv4 address or hostname, split on : to remove port
-    return netloc.split(":")[0]
-
-
-def _validate_ip_address(hostname: str, url: str) -> bool:
-    """
-    Validate IP addresses and reject private/reserved ones.
-
-    Returns:
-        True if hostname is an IP address (and validation passed)
-        False if hostname is not an IP address
-    """
-    try:
-        ip = ipaddress.ip_address(hostname)
-        if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_unspecified:
-            error_msg = f"SSRF protection: Rejected URL with private/reserved IP: {url}"
-            logger.warning(error_msg)
-            raise SecurityError(error_msg)
-        # Reject all IP addresses for security (only allow known domains)
-        error_msg = f"SSRF protection: Rejected public IP address: {url}"
-        logger.warning(error_msg)
-        raise SecurityError(error_msg)
-    except ValueError:
-        # Not an IP address
-        return False
-
-
-def _validate_internal_hostnames(hostname: str, url: str) -> None:
+@validator
+def _is_internal_hostname(hostname: str) -> bool:
     """Validate against internal hostnames."""
     if (
         hostname == "localhost"
         or hostname.endswith(".local")
         or hostname.endswith(".internal")
+        or hostname.endswith(".arpa")
     ):
         error_msg = f"SSRF protection: Rejected internal hostname: {url}"
         logger.warning(error_msg)
-        raise SecurityError(error_msg)
+        return False
+    return True
 
-
-def _validate_numeric_ip_hostname(hostname: str, url: str) -> None:
-    """Validate numeric IP hostnames to catch unusual formats."""
-    if re.match(r"^\d+\.\d+\.\d+\.\d+$", hostname):
-        try:
-            ip = ipaddress.ip_address(hostname)
-            if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_unspecified:
-                error_msg = f"SSRF protection: Rejected numeric IP hostname: {url}"
-                logger.warning(error_msg)
-                raise SecurityError(error_msg)
-        except ValueError as e:
-            error_msg = f"SSRF protection: Rejected unusual numeric hostname: {url}"
-            logger.warning(error_msg)
-            raise SecurityError(error_msg) from e
-
-
+@validator
 def _check_domain_whitelist(hostname: str) -> bool:
     """Check if hostname is in the AT Protocol domain whitelist."""
     domain_parts = hostname.split(".")
@@ -106,8 +52,21 @@ def _check_domain_whitelist(hostname: str) -> bool:
             return True
     return False
 
+@validator
+def _check_url_creds(url_parts) -> bool:
+    if parts.username is not None:
+        return False
+    if parts.password is not None:
+        return False
+    return True
 
-def is_safe_url(url: str) -> bool:
+# Used in the validator ti check the
+def validate_scheme(scheme: str) -> bool:
+    if scheme == "https":
+        return True
+    return False
+
+def valid_url(url: str):
     """
     Validate if a URL is safe to make a request to.
 
@@ -125,46 +84,32 @@ def is_safe_url(url: str) -> bool:
     Raises:
         SecurityError: If the URL fails security checks
     """
-    if not url:
-        raise SecurityError("URL cannot be empty")
 
-    try:
-        parsed = urllib.parse.urlparse(url)
+    url_parts = urlparse(url)
 
-        # Validate HTTPS protocol
-        _validate_https_protocol(parsed, url)
-
-        # Extract hostname from netloc
-        hostname = _extract_hostname(parsed.netloc)
-
-        # Check if it's an IP address and validate it
-        if _validate_ip_address(hostname, url):
-            return True  # This won't be reached due to SecurityError in _validate_ip_address
-
-        # For IPv6 bracket notation that failed IP parsing, use the full netloc
-        if parsed.netloc.startswith("["):
-            hostname = parsed.netloc
+    try:  
+        validators.url(
+            value=url,
+            skip_ipv6_addr=True,
+            skip_ipv4_addr=True,
+            may_have_port=False,
+            validate_scheme=validate_scheme
+        )
 
         # Validate against internal hostnames
-        _validate_internal_hostnames(hostname, url)
-
-        # Check for numeric IP patterns
-        _validate_numeric_ip_hostname(hostname, url)
+        _is_internal_hostname(parts.hostname)
 
         # Check domain whitelist
-        if _check_domain_whitelist(hostname):
-            return True
+        _check_domain_whitelist(parts.hostname)
 
-        # Domain not in whitelist
-        logger.warning(
-            "SSRF protection: URL hostname not in AT Protocol whitelist: %s", hostname
-        )
-        return False
+        # Check for username and password
+        _check_url_creds(parts.hostname)
 
-    except SecurityError:
-        # Re-raise security errors
-        raise
-    except Exception as e:
-        error_msg = f"SSRF protection: URL validation error: {e}"
-        logger.error(error_msg)
-        raise SecurityError(error_msg) from e
+    except ValidationError as e:
+        logger.error(f"URL validation error {e}")
+        raise ValidationError
+    
+    return
+
+ 
+

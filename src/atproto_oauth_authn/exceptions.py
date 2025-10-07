@@ -27,3 +27,7 @@ class SecurityError(AtprotoOauthError):
 
 class InvalidParameterError(AtprotoOauthError):
     """Invalid parameter provided to a function."""
+
+
+class TokenRequestError(AtprotoOauthError):
+    """Error retrieving token from the authn server."""

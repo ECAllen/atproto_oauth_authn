@@ -6,19 +6,29 @@ with AT Protocol services like Bluesky.
 
 import logging
 import urllib.parse
-from typing import Tuple
-from dataclasses import dataclass
+import time
+import json
+from typing import Tuple, Any, List
+from dataclasses import dataclass, asdict
 from .identity import resolve_identity
 from .did import retrieve_did_document, extract_pds_url
-from .metadata import get_pds_metadata, extract_auth_server, get_auth_server_metadata
 from .oauth import (
     generate_oauth_state,
-    generate_code_verifier,
     generate_code_challenge,
+    authserver_dpop_jwt,
+    client_assertion_jwt,
     send_par_request,
+    PARRequestContext,
+    get_pds_metadata, 
+    extract_auth_server, 
+    get_auth_server_metadata
 )
-from . import security
+
 from .exceptions import InvalidParameterError
+from joserfc import jwt
+from joserfc.jwk import ECKey
+from authlib.common.security import generate_token
+from authlib.oauth2.rfc7636 import create_s256_code_challenge
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,10 +76,10 @@ def resolve_user_did(username: str) -> str:
         logging.error("Failed to extract PDS URL from DID document: %s", e)
         raise
 
-    return pds_url
+    return pds_url, user_did
 
 
-def discover_auth_server(pds_url: str) -> Tuple[str, str, str]:
+def discover_auth_server(pds_url: str) -> dict:
     """Discover authorization server from PDS metadata.
 
     Args:
@@ -98,61 +108,55 @@ def discover_auth_server(pds_url: str) -> Tuple[str, str, str]:
     logging.debug("Authorization server URL: %s", auth_servers[0])
 
     # Get the metadata of the authorization server
-    try:
-        auth_metadata, auth_endpoint, token_endpoint, par_endpoint = (
-            get_auth_server_metadata(auth_servers)
-        )
-    except Exception as e:
-        logging.error("Failed to retrieve auth server metadata: %s", e)
-        raise
+    auth_metadata = get_auth_server_metadata(auth_servers)
 
-    logging.debug("Auth server metadata retrieved successfully")
-    logging.debug("Auth Server Endpoints:")
-    logging.debug("  Authorization: %s", auth_endpoint)
-    logging.debug("  Token: %s", token_endpoint)
-    logging.debug("  PAR: %s", par_endpoint or "Not available")
-    logging.debug("  metadata: %s", auth_metadata or "Not available")
+    # logging.debug("Auth server metadata retrieved successfully")
+    # logging.debug("Auth Server Endpoints:")
+    # logging.debug("  Authorization: %s", auth_endpoint)
+    # logging.debug("  Token: %s", token_endpoint)
+    # logging.debug("  PAR: %s", par_endpoint or "Not available")
+    # logging.debug("  metadata: %s", auth_metadata or "Not available")
 
-    return auth_endpoint, token_endpoint, par_endpoint
+    return auth_metadata
 
 
-def generate_oauth_params() -> Tuple[str, str, str]:
-    """Generate OAuth state, code verifier, and code challenge.
+# def generate_oauth_params() -> Tuple[str, str, str]:
+#     """Generate OAuth state, code verifier, and code challenge.
 
-    Returns:
-        Tuple of (oauth_state, code_verifier, code_challenge)
+#     Returns:
+#         Tuple of (oauth_state, code_verifier, code_challenge)
 
-    Raises:
-        Various exceptions from the atproto_oauth_authn module if generation fails
-    """
-    # Generate a state parameter for OAuth request
-    try:
-        oauth_state = generate_oauth_state()
-    except Exception as e:
-        logging.error("Failed to generate the oauth request: %s", e)
-        raise
+#     Raises:
+#         Various exceptions from the atproto_oauth_authn module if generation fails
+#     """
+#     # Generate a state parameter for OAuth request
+#     try:
+#         oauth_state = generate_oauth_state()
+#     except Exception as e:
+#         logging.error("Failed to generate the oauth request: %s", e)
+#         raise
 
-    logging.debug("Generated OAuth state: %s... (truncated)", oauth_state[:10])
+#     logging.debug("Generated OAuth state: %s... (truncated)", oauth_state[:10])
 
-    # Generate a code_verifier for PKCE
-    try:
-        code_verifier = generate_code_verifier(48)
-    except Exception as e:
-        logging.error("Failed to generate code verifier: %s", e)
-        raise
+#     # Generate a code_verifier for PKCE
+#     try:
+        
+#     except Exception as e:
+#         logging.error("Failed to generate code verifier: %s", e)
+#         raise
 
-    logging.debug("Generated code_verifier: %s... (truncated)", code_verifier[:10])
+#     logging.debug("Generated code_verifier: %s... (truncated)", code_verifier[:10])
 
-    # Generate a code_challenge from the code_verifier
-    try:
-        code_challenge = generate_code_challenge(code_verifier)
-    except Exception as e:
-        logging.error("Failed to generate code challenge: %s", e)
-        raise
+#     # Generate a code_challenge from the code_verifier
+#     try:
+#         code_challenge = generate_code_challenge(code_verifier)
+#     except Exception as e:
+#         logging.error("Failed to generate code challenge: %s", e)
+#         raise
 
-    logging.debug("Generated code_challenge: %s... (truncated)", code_challenge[:10])
+#     logging.debug("Generated code_challenge: %s... (truncated)", code_challenge[:10])
 
-    return oauth_state, code_verifier, code_challenge
+#     return oauth_state, code_verifier, code_challenge
 
 
 def build_client_config(app_url: str) -> Tuple[str, str]:
@@ -175,77 +179,8 @@ def build_client_config(app_url: str) -> Tuple[str, str]:
     return client_id, redirect_uri
 
 
-@dataclass
-class PARRequestContext:
-    """Context for performing a PAR request with all necessary parameters."""
 
-    par_endpoint: str
-    code_challenge: str
-    oauth_state: str
-    username: str
-    client_id: str
-    redirect_uri: str
-    app_url: str
-
-    def __post_init__(self):
-        """Validate required parameters after initialization."""
-        if not self.par_endpoint:
-            raise InvalidParameterError("PAR endpoint is required")
-        if not self.code_challenge:
-            raise InvalidParameterError("code_challenge is required")
-        if not self.oauth_state:
-            raise InvalidParameterError("oauth_state is required")
-        if not self.client_id:
-            raise InvalidParameterError("client_id is required")
-        if not self.redirect_uri:
-            raise InvalidParameterError("redirect_uri is required")
-
-
-def perform_par_request(context: PARRequestContext) -> Tuple[str, int]:
-    """Send PAR request and return request_uri and expires_in.
-
-    Args:
-        context: PARRequestContext containing all necessary parameters
-
-    Returns:
-        Tuple of (request_uri, expires_in)
-
-    Raises:
-        Various exceptions from the atproto_oauth_authn module if PAR request fails
-    """
-    logging.debug("App URL: %s", context.app_url)
-    logging.debug(
-        """PAR request parameters:
-        par_endpoint=%s,
-        code_challenge=%s,
-        state=%s,
-        login_hint=%s,
-        client_id=%s,
-        redirect_uri=%s""",
-        context.par_endpoint,
-        context.code_challenge,
-        context.oauth_state,
-        context.username,
-        context.client_id,
-        context.redirect_uri,
-    )
-    # Use the username as login_hint if available
-    try:
-        request_uri, expires_in = send_par_request(
-            context=context,
-        )
-    except Exception as e:
-        logging.error("Failed to send PAR request: %s", e)
-        raise
-
-    logging.debug("PAR request successful!")
-    logging.debug("Request URI: %s", request_uri)
-    logging.debug("Expires in: %s seconds", expires_in)
-
-    return request_uri, expires_in
-
-
-def get_authn_url(username: str, app_url: str) -> str:
+def get_authn_url(username: str, app_url: str,  dpop_private_jwk: ECKey| None = None, client_secret_jwk: ECKey | None = None) -> Tuple[str,str,str,Any,dict]:
     """Generate an OAuth authorization URL for AT Protocol authentication.
 
     This function orchestrates the complete OAuth flow setup by calling
@@ -262,35 +197,54 @@ def get_authn_url(username: str, app_url: str) -> str:
         Various exceptions from the atproto_oauth_authn module if any step fails
     """
     # Resolve user and discover servers
-    pds_url = resolve_user_did(username)
-    auth_endpoint, _, par_endpoint = discover_auth_server(pds_url)
+    pds_url, user_did = resolve_user_did(username)
+    
+    # auth_endpoint, _, par_endpoint = discover_auth_server(pds_url)
+    auth_server_metadata = discover_auth_server(pds_url)
+
+    print(json.dumps(auth_server_metadata, indent=2))
+    auth_endpoint = auth_server_metadata["authorization_endpoint"]
+    par_endpoint = auth_server_metadata["pushed_authorization_request_endpoint"]
+    
     # Generate OAuth parameters
-    oauth_state, _, code_challenge = generate_oauth_params()
+    code_verifier = generate_token(48)
+    state = generate_token()
+    code_challenge = create_s256_code_challenge(code_verifier)
+
     # Build client configuration
     client_id, redirect_uri = build_client_config(app_url)
+
+    # Generate the client assertion
+    client_assertion = client_assertion_jwt(
+        client_id, auth_endpoint, client_secret_jwk
+    )
+
+    dpop_proof = authserver_dpop_jwt(
+        method="POST", 
+        url=par_endpoint,
+        dpop_private_jwk=dpop_private_jwk
+    )
+
     # Perform PAR request
     par_context = PARRequestContext(
-        par_endpoint=par_endpoint,
+        response_type="code",
         code_challenge=code_challenge,
-        oauth_state=oauth_state,
-        username=username,
+        code_challenge_method="S256",
+        state=state,
+        login_hint=username,
         client_id=client_id,
         redirect_uri=redirect_uri,
+        scope="atproto transition:generic",
+        client_assertion_type="urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        client_assertion=client_assertion,
+        par_endpoint=par_endpoint,
         app_url=app_url,
-    )
-    request_uri, _ = perform_par_request(par_context)
+        dpop_proof=dpop_proof,
+        dpop_private_jwk=dpop_private_jwk
+        )
 
-    # Build final auth URL
-    qparam = urllib.parse.urlencode(
-        {"client_id": client_id, "request_uri": request_uri}
-    )
-    auth_url = f"{auth_endpoint}?{qparam}"
-    assert security.is_safe_url(auth_url)
+    dpop_nonce, response = send_par_request(
+        context=par_context,
+        )
 
-    logging.debug("\nAuthorization URL:")
-    logging.debug(
-        "%s?client_id=%s&request_uri=%s", auth_endpoint, client_id, request_uri
-    )
-    logging.debug(auth_url)
-
-    return auth_url
+    return code_verifier, state, dpop_nonce, response.json(), auth_server_metadata, user_did, pds_url, client_id

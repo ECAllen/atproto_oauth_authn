@@ -12,6 +12,14 @@
 
 <https://docs.bsky.app/blog/oauth-atproto>
 
+<https://github.com/pilcrowonpaper/atproto-oauth-example/tree/main>
+
+<https://github.com/bluesky-social/proposals/tree/main/0004-oauth>
+
+<https://post-pulse.com/oauth/jwks.json>
+
+<https://medium.com/@sas.pogorelov/oauth-in-a-decentralized-environment-case-study-of-bluesky-f215cdbcadda>
+
 ## Steps
 
 1) get users handle from form
