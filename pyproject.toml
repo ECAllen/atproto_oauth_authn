@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "AT Protocol OAuth authentication client for Python"
 readme = "README.md"
 authors = [{name = "ecallen", email = "ethancallen@gmail.com"}]
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 license = {text = "MIT"}
 dependencies = [
     "authlib>=1.5.1",
