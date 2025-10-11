@@ -1,7 +1,6 @@
 """OAuth functionality for AT Protocol."""
 
 import logging
-40
 import secrets
 import base64
 import hashlib
@@ -27,7 +26,6 @@ if TYPE_CHECKING:
 import validators
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class PARRequestContext:
@@ -98,7 +96,7 @@ def get_pds_metadata(pds_url: str) -> Dict[str, Any]:
 
     # Check URL for SSRF vulnerabilities
     try:
-        is_safe_url(metadata_url)
+        valid_url(metadata_url)
     except SecurityError:
         logger.error("Security check failed for URL: %s", metadata_url)
         raise
@@ -175,7 +173,7 @@ def _fetch_single_auth_server_metadata(
     logger.info("Trying to fetch auth server metadata from: %s", metadata_url)
 
     # Check URL for SSRF vulnerabilities
-    is_safe_url(metadata_url)  # Raises SecurityError if unsafe
+    valid_url(metadata_url)  # Raises SecurityError if unsafe
 
     response = httpx.get(metadata_url)
     response.raise_for_status()
@@ -238,7 +236,7 @@ def get_auth_server_metadata(
             logger.info("Trying to fetch auth server metadata from: %s", metadata_url)
 
             # Check URL for SSRF vulnerabilities
-            is_safe_url(metadata_url)  # Raises SecurityError if unsafe
+            valid_url(metadata_url)  # Raises SecurityError if unsafe
 
             response = httpx.get(metadata_url)
             response.raise_for_status()
@@ -518,87 +516,55 @@ def send_par_request(
         InvalidParameterError: If required parameters are missing (via context validation)
     """
 
-    logger.info("Sending PAR request to: %s", context.par_endpoint)
     logger.debug("PAR request parameters: %s", context)
 
     # Check URL for SSRF vulnerabilities
     try:
-        is_safe_url(context.par_endpoint)
+        valid_url(context.par_endpoint)
     except SecurityError:
         logger.error("Security check failed for URL: %s", context.par_endpoint)
-        raise
+        raise OauthFlowError()
 
-    try:
-        # Send the POST request with form-encoded body
-        response = httpx.post(
+    # First PAR request
+    logger.info("Sending PAR request to: %s", context.par_endpoint)
+    response = httpx.post(
+        context.par_endpoint,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "DPoP": context.dpop_proof,
+        },
+        data=context.par_request_body(),
+    )
+
+    if response.status_code == 400 and response.json()["error"] == "use_dpop_nonce":
+        dpop_authserver_nonce = response.headers["DPoP-Nonce"]
+        #TODO try needed?s
+        dpop_proof = authserver_dpop_jwt(
+            method="POST", url=context.par_endpoint, nonce=dpop_authserver_nonce, dpop_private_jwk=context.dpop_private_jwk
+        )
+
+        logging.info(f"Retrying with new auth server DPoP nonce")
+        response_dpop = httpx.post(
             context.par_endpoint,
             headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "DPoP": context.dpop_proof,
+            "Content-Type": "application/x-www-form-urlencoded",
+            "DPoP": dpop_proof,
             },
             data=context.par_request_body(),
         )
-        # response.raise_for_status()
-        
-        if response.status_code == 400 and response.json()["error"] == "use_dpop_nonce":
-            dpop_authserver_nonce = response.headers["DPoP-Nonce"]
-            print(f"retrying with new auth server DPoP nonce: {dpop_authserver_nonce}")
-            dpop_proof = authserver_dpop_jwt(
-                method="POST", url=context.par_endpoint, nonce=dpop_authserver_nonce, dpop_private_jwk=context.dpop_private_jwk
-            )
+        if 'error' in response_dpop.json():
+            logging.error("Error retrying with new DPoP")
+            logging.error(response_dpop.json())
+        response_dpop.raise_for_status()
+    else:
+        logging.error("Error sending PAR request")
+        logging.error(response.json())
+        response.raise_for_status()
 
-            response = httpx.post(
-                context.par_endpoint,
-                headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "DPoP": dpop_proof,
-                },
-                data=context.par_request_body(),
-            )
-            # with hardened_http.get_session() as sess:
-            #     resp = sess.post(
-            #         par_url,
-            #         headers={
-            #             "Content-Type": "application/x-www-form-urlencoded",
-            #             "DPoP": dpop_proof,
-            #         },
-            #         data=par_body,
-            # )
+    # Parse the JSON response
+    data = response_dpop.json()
+    logger.info("PAR request successful")
+    #TODO make this debug later
+    logger.info(f"{data}")
 
-        # Parse the JSON response
-        data = response.json()
-        logger.info("PAR request successful")
-        logger.info(f"{data}")
-
-        # Extract the request_uri and expires_in values
-        request_uri = data.get("request_uri")
-        expires_in = data.get("expires_in")
-
-        if request_uri:
-            logger.info("Received request_uri: %s", request_uri)
-            logger.info("Request URI expires in: %s seconds", expires_in)
-            return dpop_authserver_nonce, response
-
-        error_msg = "No request_uri found in PAR response"
-        logger.error(error_msg)
-        raise OauthFlowError(error_msg)
-
-    except httpx.HTTPStatusError as e:
-        error_msg = f"HTTP error occurred during PAR request: {e}"
-        logger.error(error_msg)
-        try:
-            # Try to extract error details from response
-            error_data = e.response.json()
-            logger.error("Error details: %s", error_data)
-            error_msg = f"{error_msg} - {error_data}"
-        except json.JSONDecodeError:
-            logger.error("Could not parse error response as JSON")
-        raise OauthFlowError(error_msg) from e
-    except httpx.RequestError as e:
-        error_msg = f"Request error occurred during PAR request: {e}"
-        logger.error(error_msg)
-        raise OauthFlowError(error_msg) from e
-    except json.JSONDecodeError as e:
-        error_msg = "Failed to parse JSON response from PAR request"
-        logger.error(error_msg)
-        raise OauthFlowError(error_msg) from e
+    return dpop_authserver_nonce, response_dpop

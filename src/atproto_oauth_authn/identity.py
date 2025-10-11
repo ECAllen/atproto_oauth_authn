@@ -4,6 +4,7 @@ import logging
 import re
 import json
 
+from validators import ValidationError
 import httpx
 
 from .security import valid_url

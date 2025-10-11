@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Tuple
 from urllib.parse import urlparse
 import httpx
 
-from .security import is_safe_url
+from .security import valid_url
 from .exceptions import MetadataError, SecurityError
 from .metadata import get_pds_metadata, extract_auth_server, get_auth_server_metadata
 

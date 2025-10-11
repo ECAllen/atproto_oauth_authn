@@ -67,7 +67,7 @@ __all__ = [
     "generate_code_challenge",
     "send_par_request",
     "PARRequest",
-    "is_safe_url",
+    "valid_url",
     "build_auth_url",
     "get_authn_url",
     # Exceptions

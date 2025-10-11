@@ -31,13 +31,6 @@ def retrieve_did_document(did: str) -> Dict[str, Any]:
 
     url = f"https://plc.directory/{did}"
 
-    # Check URL for SSRF vulnerabilities
-    try:
-        valide_url(url)
-    except SecurityError:
-        logger.error("ValidationError check failed for URL: %s", url)
-        raise
-
     try:
         # Make HTTP request to retrieve the DID document
         response = httpx.get(url)

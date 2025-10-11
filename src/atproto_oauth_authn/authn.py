@@ -30,14 +30,14 @@ from joserfc.jwk import ECKey
 from authlib.common.security import generate_token
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),  # Output to console
-        logging.FileHandler("app.log"),  # Output to file
-    ],
-)
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+#     handlers=[
+#         logging.StreamHandler(),  # Output to console
+#         logging.FileHandler("app.log"),  # Output to file
+#     ],
+# )
 logger = logging.getLogger(__name__)
 
 
@@ -202,7 +202,7 @@ def get_authn_url(username: str, app_url: str,  dpop_private_jwk: ECKey| None = 
     # auth_endpoint, _, par_endpoint = discover_auth_server(pds_url)
     auth_server_metadata = discover_auth_server(pds_url)
 
-    print(json.dumps(auth_server_metadata, indent=2))
+    # logger.debug(json.dumps(auth_server_metadata, indent=2))
     auth_endpoint = auth_server_metadata["authorization_endpoint"]
     par_endpoint = auth_server_metadata["pushed_authorization_request_endpoint"]
     

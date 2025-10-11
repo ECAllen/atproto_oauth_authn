@@ -54,9 +54,9 @@ def _check_domain_whitelist(hostname: str) -> bool:
 
 @validator
 def _check_url_creds(url_parts) -> bool:
-    if parts.username is not None:
+    if url_parts.username is not None:
         return False
-    if parts.password is not None:
+    if url_parts.password is not None:
         return False
     return True
 
@@ -97,17 +97,17 @@ def valid_url(url: str):
         )
 
         # Validate against internal hostnames
-        _is_internal_hostname(parts.hostname)
+        _is_internal_hostname(url_parts.hostname)
 
         # Check domain whitelist
-        _check_domain_whitelist(parts.hostname)
+        _check_domain_whitelist(url_parts.hostname)
 
         # Check for username and password
-        _check_url_creds(parts.hostname)
+        _check_url_creds(url_parts)
 
-    except ValidationError as e:
+    except validators.ValidationError as e:
         logger.error(f"URL validation error {e}")
-        raise ValidationError
+        raise validators.ValidationError
     
     return
 
