@@ -8,8 +8,9 @@ import logging
 import urllib.parse
 import time
 import json
-from typing import Tuple, Any, List
+from typing import Tuple, Any, List, Dict
 from dataclasses import dataclass, asdict
+from .security import valid_url
 from .identity import resolve_identity
 from .did import retrieve_did_document, extract_pds_url
 from .oauth import (
@@ -21,9 +22,10 @@ from .oauth import (
     PARRequestContext,
     get_pds_metadata, 
     extract_auth_server, 
-    get_auth_server_metadata
+    get_pds_auth_server_metadata,
+    build_client_config,
 )
-
+from validators import ValidationError
 from .exceptions import InvalidParameterError
 from joserfc import jwt
 from joserfc.jwk import ECKey
@@ -38,6 +40,7 @@ from authlib.oauth2.rfc7636 import create_s256_code_challenge
 #         logging.FileHandler("app.log"),  # Output to file
 #     ],
 # )
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,46 +81,47 @@ def resolve_user_did(username: str) -> str:
 
     return pds_url, user_did
 
+#TODO re-org to atproto specific file 
+def get_pds_auth_servers(pds_url: str) -> List:
+    try:
+        valid_url(pds_url)
+    except Exception as e:
+        logging.error("The PDS URL failed vaildation {e}")
+        raise ValidationError
 
-def discover_auth_server(pds_url: str) -> dict:
-    """Discover authorization server from PDS metadata.
-
-    Args:
-        pds_url: The PDS server URL
-
-    Returns:
-        Tuple of (auth_endpoint, token_endpoint, par_endpoint)
-
-    Raises:
-        Various exceptions from the atproto_oauth_authn module if any step fails
-    """
     # Get the PDS server metadata from the well-known endpoint
     try:
         pds_metadata = get_pds_metadata(pds_url)
     except Exception as e:
         logging.error("Failed to retrieve PDS metadata: %s", e)
-        raise
+        raise 
 
     # From the metadata extract the authorization server
     try:
         auth_servers = extract_auth_server(pds_metadata)
     except Exception as e:
         logging.error("Failed to extract authorization server from metadata: %s", e)
-        raise
+        raise   
 
-    logging.debug("Authorization server URL: %s", auth_servers[0])
+    return auth_servers
 
-    # Get the metadata of the authorization server
-    auth_metadata = get_auth_server_metadata(auth_servers)
 
-    # logging.debug("Auth server metadata retrieved successfully")
-    # logging.debug("Auth Server Endpoints:")
-    # logging.debug("  Authorization: %s", auth_endpoint)
-    # logging.debug("  Token: %s", token_endpoint)
-    # logging.debug("  PAR: %s", par_endpoint or "Not available")
-    # logging.debug("  metadata: %s", auth_metadata or "Not available")
-
-    return auth_metadata
+# def get_pds_auth_server_metadata(pds_auth_server_urls: List) -> Dict:
+# 
+#     logging.debug("Authorization server URL: %s", pds_auth_server_urls)
+# 
+#     # Get the metadata of the authorization server
+# 
+#     auth_metadata = get_auth_server_metadata(auth_servers)
+# 
+#     logging.debug("Auth server metadata retrieved successfully")
+#     logging.debug("Auth Server Endpoints:")
+#     logging.debug("  Authorization: %s", auth_endpoint)
+#     logging.debug("  Token: %s", token_endpoint)
+#     logging.debug("  PAR: %s", par_endpoint or "Not available")
+#     logging.debug("  metadata: %s", auth_metadata or "Not available")
+# 
+#     return auth_metadata
 
 
 # def generate_oauth_params() -> Tuple[str, str, str]:
@@ -159,25 +163,24 @@ def discover_auth_server(pds_url: str) -> dict:
 #     return oauth_state, code_verifier, code_challenge
 
 
-def build_client_config(app_url: str) -> Tuple[str, str]:
-    """Build client_id and redirect_uri from app_url.
-
-    Args:
-        app_url: The base URL of the application
-
-    Returns:
-        Tuple of (client_id, redirect_uri)
-    """
-    client_id = f"https://{app_url}/oauth/client-metadata.json"
-    redirect_uri = f"https://{app_url}/oauth/callback"
-
-    # Special case for development/testing with localhost
-    if app_url in ["localhost", "127.0.0.1"]:
-        client_id = "http://localhost/oauth/client-metadata.json"
-        redirect_uri = "http://127.0.01/oauth/callback"
-
-    return client_id, redirect_uri
-
+# def build_client_config(app_url: str) -> Tuple[str, str]:
+#     """Build client_id and redirect_uri from app_url.
+# 
+#     Args:
+#         app_url: The base URL of the application
+# 
+#     Returns:
+#         Tuple of (client_id, redirect_uri)
+#     """
+#     client_id = f"https://{app_url}/oauth/client-metadata.json"
+#     redirect_uri = f"http://{app_url}/oauth/callback"
+# 
+#     # Special case for development/testing with localhost
+#     if app_url in ["localhost", "127.0.0.1"]:
+#         client_id = "http://localhost/oauth/client-metadata.json"
+#         redirect_uri = "http://127.0.01/oauth/callback"
+# 
+#     return client_id, redirect_uri
 
 
 def get_authn_url(username: str, app_url: str,  dpop_private_jwk: ECKey| None = None, client_secret_jwk: ECKey | None = None) -> Tuple[str,str,str,Any,dict]:
@@ -199,11 +202,12 @@ def get_authn_url(username: str, app_url: str,  dpop_private_jwk: ECKey| None = 
     # Resolve user and discover servers
     pds_url, user_did = resolve_user_did(username)
     
-    # auth_endpoint, _, par_endpoint = discover_auth_server(pds_url)
-    auth_server_metadata = discover_auth_server(pds_url)
+    auth_servers = get_pds_auth_servers(pds_url)
+    auth_endpoint = auth_servers[0]
 
-    # logger.debug(json.dumps(auth_server_metadata, indent=2))
-    auth_endpoint = auth_server_metadata["authorization_endpoint"]
+    # auth_endpoint = auth_server_metadata["authorization_endpoint"]
+    auth_server_metadata = get_pds_auth_server_metadata(auth_servers)
+    # auth_endpoint = auth_server_metadata["authorization_servers"][0]
     par_endpoint = auth_server_metadata["pushed_authorization_request_endpoint"]
     
     # Generate OAuth parameters

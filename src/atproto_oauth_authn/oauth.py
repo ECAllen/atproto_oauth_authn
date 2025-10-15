@@ -72,6 +72,25 @@ class PARRequestContext:
             "client_assertion": self.client_assertion,
         }
 
+def build_client_config(app_url: str) -> Tuple[str, str]:
+    """Build client_id and redirect_uri from app_url.
+
+    Args:
+        app_url: The base URL of the application
+
+    Returns:
+        Tuple of (client_id, redirect_uri)
+    """
+    client_id = f"https://{app_url}/oauth/client-metadata.json"
+    redirect_uri = f"https://{app_url}/oauth/callback"
+
+    # Special case for development/testing with localhost
+    if app_url in ["localhost", "127.0.0.1"]:
+        client_id = "http://localhost/oauth/client-metadata.json"
+        redirect_uri = "http://127.0.01/oauth/callback"
+
+    return client_id, redirect_uri
+
 def get_pds_metadata(pds_url: str) -> Dict[str, Any]:
     """
     Retrieve the OAuth protected resource metadata from the PDS server.
@@ -208,9 +227,9 @@ def _extract_endpoints_from_metadata(
     return metadata, auth_endpoint, token_endpoint, par_endpoint
 
 
-def get_auth_server_metadata(
+def get_pds_auth_server_metadata(
     auth_servers: List[str],
-) -> dict | List[str]:
+) -> dict:
     """
     Retrieve the OAuth authorization server metadata from the first available server.
 
@@ -231,28 +250,22 @@ def get_auth_server_metadata(
         raise MetadataError(error_msg)
 
     for auth_server in auth_servers:
+        metadata_url = f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
+        logger.info("Trying to fetch auth server metadata from: %s", metadata_url)
+
+        # Check URL for SSRF vulnerabilities
         try:
-            metadata_url = f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
-            logger.info("Trying to fetch auth server metadata from: %s", metadata_url)
-
-            # Check URL for SSRF vulnerabilities
             valid_url(metadata_url)  # Raises SecurityError if unsafe
-
-            response = httpx.get(metadata_url)
-            response.raise_for_status()
-
-            metadata = response.json()
-            logger.info("Successfully retrieved auth server metadata from %s", auth_server)
-            return metadata
         except Exception as e:
-            error_msg = (
-                "HTTP error occurred while retrieving auth server metadata "
-                f"from {auth_server}: {e}"
-            )
-            logger.warning(error_msg)
-            errors.append(error_msg)
-    
-    return errors
+            logger.error(f"PDS Auth server metadata URL validation failed: {e}")
+            raise ValidationError
+
+        response = httpx.get(metadata_url)
+        response.raise_for_status()
+
+        metadata = response.json()
+        logger.info("Successfully retrieved auth server metadata from %s", auth_server)
+        return metadata
 
 
 
@@ -262,18 +275,15 @@ def initial_token_request(
     app_url: str,
     client_secret_jwk: ECKey,
 ) -> Tuple[dict, str]:
- 
-    authserver_url = authn_metadata["authserver_iss"]
+
+    authserver_url = authn_metadata["iss"]
 
     #TODO is this necessary?
     # Re-fetch server metadata
-    authserver_meta = get_auth_server_metadata([authserver_url])
+    authserver_meta = get_pds_auth_server_metadata([authserver_url])
 
-    # Construct auth token request fields
-    client_id = f"{app_url}/oauth/client-metadata.json"
-    redirect_uri = f"{app_url}/oauth/callback"
+    client_id, redirect_uri = build_client_config(app_url)
 
-    # Self-signed JWT using the private key declared in client metadata JWKS (confidential client)
     client_assertion = client_assertion_jwt(
         client_id, authserver_url, client_secret_jwk
     )
@@ -283,40 +293,49 @@ def initial_token_request(
         "redirect_uri": redirect_uri,
         "grant_type": "authorization_code",
         "code": code,
-        "code_verifier": authn_metadata["pkce_verifier"],
+        "code_verifier": authn_metadata["code_verifier"],
         "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
         "client_assertion": client_assertion,
     }
 
+    logging.debug(f"Data: {data}")
+
     # Create DPoP header JWT, using the existing DPoP signing key for this account/session
-    token_endpoint = authn_metadata["token_endpoint"]
+    token_endpoint = authserver_meta["token_endpoint"]
+    try:
+        valid_url(token_endpoint)
+        logging.info("✅ Token endpoint valid.")
+    except ValidationError as e:
+        logging.error(f"Token endpoint {token_endpoint} validation error {e}")
+        raise TokenRequestError 
 
     dpop_private_jwk = ECKey.import_key(
         json.loads(authn_metadata["dpop_private_jwk"])
     )
 
-    dpop_authserver_nonce = authn_metadata["dpop_authserver_nonce"]
+    dpop_nonce = authn_metadata["dpop_nonce"]
     
     dpop_proof = authserver_dpop_jwt(
         method="POST",
         url=token_endpoint, 
         dpop_private_jwk=dpop_private_jwk,
-        nonce=dpop_authserver_nonce,
+        nonce=dpop_nonce,
     )
 
-    try:
-        valid_url(token_endpoint)
-        logging.info("✅ Token endpoint valid.")
-    except ValidationError as e:
-        logging.error(f"Token endopoint {token_endpooint} alidation error {e}")
-        raise TokenRequestError 
+    # response = httpx.post(
+    #     context.par_endpoint,
+    #     headers={
+    #         "Content-Type": "application/x-www-form-urlencoded",
+    #         "DPoP": context.dpop_proof,
+    #     },
+    #     data=context.par_request_body(),
+    # )
 
-    try:
-        with httpx.Client(timeout=10.0,follow_redirects=False,verify=True,trust_env=False) as client:
-            response = client.post(token_endpoint, headers={"DPoP": dpop_proof}, data=data)
-    except httpx.RequestError as e:
-        logger.error(f"An error occurred while requesting: {e}")
-        raise TokenRequestError 
+    with httpx.Client(timeout=60.0,follow_redirects=False,verify=True,trust_env=False) as client:
+        response = client.post(token_endpoint, headers={"DPoP": dpop_proof}, data=data)
+
+    # response = httpx.post(token_endpoint, headers={"DPoP": dpop_proof}, data=data)
+    logging.debug(f"Response: {response.json()}")
 
     if response.status_code == 400 and response.json()["error"] == "use_dpop_nonce":
         dpop_nonce = response.headers["DPoP-Nonce"]
@@ -524,6 +543,8 @@ def send_par_request(
     except SecurityError:
         logger.error("Security check failed for URL: %s", context.par_endpoint)
         raise OauthFlowError()
+
+    logging.debug(f"PAR request body: {context.par_request_body()}")
 
     # First PAR request
     logger.info("Sending PAR request to: %s", context.par_endpoint)
