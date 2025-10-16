@@ -93,8 +93,7 @@ def main() -> bool:
     parameters = {"kid": f"dpop-par-request-{now}"}
     dpop_private_jwk  = ECKey.generate_key(
         'P-256', parameters=parameters)
-
-    scope = "atproto transition:generic"
+    
 
     code_verifier, state, dpop_nonce, response, auth_server_metadata, user_did, pds_url, client_id = atproto_oauth_authn.get_authn_url(username, app_url, client_secret_jwk=CLIENT_SECRET_JWK, dpop_private_jwk=dpop_private_jwk)
 
