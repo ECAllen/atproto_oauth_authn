@@ -30,7 +30,6 @@ from dotenv import load_dotenv
 import atproto_oauth_authn
 from joserfc.jwk import ECKey
 import urllib.parse
-# from . import security
 
 
 # Set up logging configuration

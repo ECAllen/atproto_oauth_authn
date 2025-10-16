@@ -3,11 +3,8 @@
 import logging
 import json
 from typing import Tuple, Dict, Any
-
 import httpx
-
-from .security import valid_url
-from .exceptions import DidDocumentError, SecurityError
+from .exceptions import DidDocumentError
 
 logger = logging.getLogger(__name__)
 

@@ -28,7 +28,6 @@ from .oauth import (
     send_par_request,
 )
 from .security import valid_url
-from .utils import build_auth_url
 from .exceptions import (
     AtprotoOauthError,
     IdentityResolutionError,

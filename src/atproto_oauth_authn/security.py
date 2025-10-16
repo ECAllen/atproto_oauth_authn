@@ -1,8 +1,6 @@
 """Security functions for AT Protocol OAuth."""
 
 import logging
-import re
-import ipaddress
 from typing import Set
 
 import validators
@@ -54,9 +52,7 @@ def _check_domain_whitelist(hostname: str) -> bool:
 
 @validator
 def _check_url_creds(url_parts) -> bool:
-    if url_parts.username is not None:
-        return False
-    if url_parts.password is not None:
+    if url_parts.username or url_parts.password:
         return False
     return True
 
@@ -104,12 +100,7 @@ def valid_url(url: str):
 
         # Check for username and password
         _check_url_creds(url_parts)
-
     except validators.ValidationError as e:
         logger.error(f"URL validation error {e}")
-        raise validators.ValidationError
-    
+        raise validators.ValidationError from e
     return
-
- 
-

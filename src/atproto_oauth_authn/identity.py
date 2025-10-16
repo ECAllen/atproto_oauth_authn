@@ -8,7 +8,7 @@ from validators import ValidationError
 import httpx
 
 from .security import valid_url
-from .exceptions import IdentityResolutionError, SecurityError
+from .exceptions import IdentityResolutionError
 
 logger = logging.getLogger(__name__)
 
@@ -60,37 +60,24 @@ def resolve_identity(username: str) -> str:
             logger.error("ValidationError check failed for URL: %s", url)
             raise
 
-        # Make HTTP request to resolve handle to DID
-        try:
-            response = httpx.get(url)
-            response.raise_for_status()  # Raise exception for 4XX/5XX responses
+        # Make HTTP request to resolve handle to DID       
+        response = httpx.get(url)
+        response.raise_for_status()  # Raise exception for 4XX/5XX responses
 
-            # Parse the JSON response
-            data = response.json()
+        # Parse the JSON response
+        data = response.json()
 
-            # Extract the DID from the response
-            did = data.get("did")
-            if did:
-                logger.debug("Resolved handle %s to DID: %s", username, did)
-                return did
+        # Extract the DID from the response
+        did = data.get("did")
+        if did:
+            logger.debug("Resolved handle %s to DID: %s", username, did)
+            return did
 
-            error_msg = (
-                f"Failed to resolve handle: {username}. No DID found in response"
-            )
-            logger.info(error_msg)
-            raise IdentityResolutionError(error_msg)
-        except httpx.HTTPStatusError as e:
-            error_msg = f"HTTP error occurred while resolving handle: {e}"
-            logger.info(error_msg)
-            raise IdentityResolutionError(error_msg) from e
-        except httpx.RequestError as e:
-            error_msg = f"Request error occurred while resolving handle: {e}"
-            logger.info(error_msg)
-            raise IdentityResolutionError(error_msg) from e
-        except json.JSONDecodeError as e:
-            error_msg = "Failed to parse JSON response from handle resolution"
-            logger.info(error_msg)
-            raise IdentityResolutionError(error_msg) from e
+        error_msg = (
+            f"Failed to resolve handle: {username}. No DID found in response"
+        )
+        logger.info(error_msg)
+        raise IdentityResolutionError(error_msg)
     elif re.match(DID_RE, username):
         # If the username is already a DID, return it directly
         logger.info("Username is already a DID: %s", username)

@@ -6,24 +6,19 @@ import base64
 import hashlib
 import json
 import time
-from typing import List, Tuple, Optional, Dict, Any, TYPE_CHECKING
-from dataclasses import dataclass,asdict
+from typing import List, Tuple, Dict, Any
+from dataclasses import dataclass
+from urllib.parse import urlparse
 
 import httpx
+from validators import ValidationError
 
 from .security import valid_url
-
-from .exceptions import OauthFlowError, SecurityError, InvalidParameterError
+from .exceptions import MetadataError, OauthFlowError, SecurityError, InvalidParameterError, TokenRequestError
 
 from joserfc.jwk import ECKey
 from authlib.common.security import generate_token
 from joserfc import jwt
-from joserfc.jwk import ECKey
-
-if TYPE_CHECKING:
-    from .authn import PARRequestContext
-
-import validators
 
 logger = logging.getLogger(__name__)
 
@@ -120,25 +115,12 @@ def get_pds_metadata(pds_url: str) -> Dict[str, Any]:
         logger.error("Security check failed for URL: %s", metadata_url)
         raise
 
-    try:
-        response = httpx.get(metadata_url)
-        response.raise_for_status()
+    response = httpx.get(metadata_url)
+    response.raise_for_status()
+    metadata = response.json()
+    logger.info("Successfully retrieved PDS metadata")
 
-        metadata = response.json()
-        logger.info("Successfully retrieved PDS metadata")
-        return metadata
-    except httpx.HTTPStatusError as e:
-        error_msg = f"HTTP error occurred while retrieving PDS metadata: {e}"
-        logger.error(error_msg)
-        raise MetadataError(error_msg) from e
-    except httpx.RequestError as e:
-        error_msg = f"Request error occurred while retrieving PDS metadata: {e}"
-        logger.error(error_msg)
-        raise MetadataError(error_msg) from e
-    except json.JSONDecodeError as e:
-        error_msg = "Failed to parse JSON response from PDS metadata retrieval"
-        logger.error(error_msg)
-        raise MetadataError(error_msg) from e
+    return metadata
 
 
 def extract_auth_server(metadata: Dict[str, Any]) -> List[str]:
@@ -183,50 +165,6 @@ def extract_auth_server(metadata: Dict[str, Any]) -> List[str]:
     logger.error(error_msg)
     raise MetadataError(error_msg)
 
-
-def _fetch_single_auth_server_metadata(
-    auth_server: str,
-) -> Tuple[Dict[str, Any], str, str, str]:
-    """Fetch metadata from a single auth server."""
-    metadata_url = f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
-    logger.info("Trying to fetch auth server metadata from: %s", metadata_url)
-
-    # Check URL for SSRF vulnerabilities
-    valid_url(metadata_url)  # Raises SecurityError if unsafe
-
-    response = httpx.get(metadata_url)
-    response.raise_for_status()
-
-    metadata = response.json()
-    logger.info("Successfully retrieved auth server metadata from %s", auth_server)
-
-    return _extract_endpoints_from_metadata(metadata, auth_server)
-
-
-def _extract_endpoints_from_metadata(
-    metadata: Dict[str, Any], auth_server: str
-) -> Tuple[Dict[str, Any], str, str, str]:
-    """Extract and validate endpoints from metadata."""
-    auth_endpoint = metadata.get("authorization_endpoint")
-    token_endpoint = metadata.get("token_endpoint")
-    par_endpoint = metadata.get("pushed_authorization_request_endpoint")
-
-    if not auth_endpoint or not token_endpoint:
-        error_msg = (
-            f"Missing required endpoints in auth server metadata from {auth_server}"
-        )
-        raise MetadataError(error_msg)
-
-    logger.info("Found authorization endpoint: %s", auth_endpoint)
-    logger.info("Found token endpoint: %s", token_endpoint)
-    if par_endpoint:
-        logger.info("Found PAR endpoint: %s", par_endpoint)
-    else:
-        logger.warning("PAR endpoint not found in auth server metadata")
-
-    return metadata, auth_endpoint, token_endpoint, par_endpoint
-
-
 def get_pds_auth_server_metadata(
     auth_servers: List[str],
 ) -> dict:
@@ -243,7 +181,6 @@ def get_pds_auth_server_metadata(
         MetadataError: If metadata cannot be retrieved from any server
         SecurityError: If there's a security issue with the URL
     """
-    errors = []
     if not auth_servers or not isinstance(auth_servers, list):
         error_msg = "Cannot get auth server metadata: No authorization servers provided"
         logger.error(error_msg)
@@ -298,15 +235,15 @@ def initial_token_request(
         "client_assertion": client_assertion,
     }
 
-    logging.debug(f"Data: {data}")
+    logger.debug(f"Data: {data}")
 
     # Create DPoP header JWT, using the existing DPoP signing key for this account/session
     token_endpoint = authserver_meta["token_endpoint"]
     try:
         valid_url(token_endpoint)
-        logging.info("✅ Token endpoint valid.")
+        logger.info("✅ Token endpoint valid.")
     except ValidationError as e:
-        logging.error(f"Token endpoint {token_endpoint} validation error {e}")
+        logger.error(f"Token endpoint {token_endpoint} validation error {e}")
         raise TokenRequestError 
 
     dpop_private_jwk = ECKey.import_key(
@@ -322,20 +259,10 @@ def initial_token_request(
         nonce=dpop_nonce,
     )
 
-    # response = httpx.post(
-    #     context.par_endpoint,
-    #     headers={
-    #         "Content-Type": "application/x-www-form-urlencoded",
-    #         "DPoP": context.dpop_proof,
-    #     },
-    #     data=context.par_request_body(),
-    # )
-
     with httpx.Client(timeout=60.0,follow_redirects=False,verify=True,trust_env=False) as client:
         response = client.post(token_endpoint, headers={"DPoP": dpop_proof}, data=data)
 
-    # response = httpx.post(token_endpoint, headers={"DPoP": dpop_proof}, data=data)
-    logging.debug(f"Response: {response.json()}")
+    logger.debug(f"Response: {response.json()}")
 
     if response.status_code == 400 and response.json()["error"] == "use_dpop_nonce":
         dpop_nonce = response.headers["DPoP-Nonce"]
@@ -367,9 +294,9 @@ def authserver_dpop_jwt(
 
     # This should ONLY contain: kty, crv, x, y (no 'd' parameter)
     if 'd' in dpop_pub_jwk:
-        logging.error("❌ ERROR: Private key 'd' parameter found in public JWK!")
+        logger.error("❌ ERROR: Private key 'd' parameter found in public JWK!")
     else:
-        logging.info("✅ Good: No private key material in JWK")
+        logger.info("✅ Good: No private key material in JWK")
 
     header = {
         "typ": "dpop+jwt",
@@ -398,7 +325,7 @@ def authserver_dpop_jwt(
         dpop_proof = dpop_proof.decode('utf-8')
 
 
-    decoded = jwt.decode(dpop_proof, dpop_private_jwk)
+    # decoded = jwt.decode(dpop_proof, dpop_private_jwk) 
     
     return dpop_proof
 
@@ -417,23 +344,6 @@ def client_assertion_jwt(
     
     return client_assertion
 
-def _send_http_request(url: str, params: Dict[str, Any]) -> Dict[str, Any]:
-    """Send HTTP request and return JSON response."""
-    response = httpx.post(url, data=params)
-    response.raise_for_status()
-    return response.json()
-
-
-def _process_par_response(response_data: Dict[str, Any]) -> Tuple[str, int]:
-    """Process PAR response and extract request_uri and expires_in."""
-    request_uri = response_data.get("request_uri")
-    if not request_uri:
-        raise OauthFlowError("No request_uri found in PAR response")
-
-    expires_in = response_data.get("expires_in", 60)  # Default to 60 seconds
-    return request_uri, expires_in
-
-
 def generate_oauth_state() -> str:
     """
     Generate a secure random state value for OAuth requests.
@@ -451,45 +361,6 @@ def generate_oauth_state() -> str:
     state = secrets.token_hex(32)
     logger.info("Generated OAuth state parameter (%d characters)", len(state))
     return state
-
-
-# def generate_code_verifier(length: int = 128) -> str:
-#     """
-#     Generate a code_verifier for PKCE (Proof Key for Code Exchange) in OAuth.
-
-#     The code_verifier is:
-#     - A cryptographically random string between 43 and 128 characters
-#     - Contains only unreserved URL characters: A-Z, a-z, 0-9, hyphen (-),
-#       period (.), underscore (_), and tilde (~)
-
-#     Args:
-#         length: Length of the code verifier (default: 128)
-#                Must be between 43 and 128 characters
-
-#     Returns:
-#         A secure random string to use as the code_verifier parameter
-
-#     Raises:
-#         InvalidParameterError: If the length is not between 43 and 128
-#     """
-#     if length < 43 or length > 128:
-#         error_msg = "Code verifier length must be between 43 and 128 characters"
-#         logger.error(error_msg)
-#         raise InvalidParameterError(error_msg)
-
-#     # Generate random bytes and convert to base64
-#     # Generate random bytes (3/4 of the desired length to account for base64 expansion)
-#     random_bytes = secrets.token_bytes(length * 3 // 4)
-
-#     # Convert to base64 and remove padding
-#     code_verifier = base64.urlsafe_b64encode(random_bytes).decode("utf-8").rstrip("=")
-
-#     # Trim to desired length
-#     code_verifier = code_verifier[:length]
-
-#     logger.info("Generated code_verifier (%d characters)", len(code_verifier))
-#     return code_verifier
-
 
 def generate_code_challenge(code_verifier: str) -> str:
     """
@@ -544,7 +415,7 @@ def send_par_request(
         logger.error("Security check failed for URL: %s", context.par_endpoint)
         raise OauthFlowError()
 
-    logging.debug(f"PAR request body: {context.par_request_body()}")
+    logger.debug(f"PAR request body: {context.par_request_body()}")
 
     # First PAR request
     logger.info("Sending PAR request to: %s", context.par_endpoint)
@@ -564,7 +435,7 @@ def send_par_request(
             method="POST", url=context.par_endpoint, nonce=dpop_authserver_nonce, dpop_private_jwk=context.dpop_private_jwk
         )
 
-        logging.info(f"Retrying with new auth server DPoP nonce")
+        logger.info("Retrying with new auth server DPoP nonce")
         response_dpop = httpx.post(
             context.par_endpoint,
             headers={
@@ -574,12 +445,12 @@ def send_par_request(
             data=context.par_request_body(),
         )
         if 'error' in response_dpop.json():
-            logging.error("Error retrying with new DPoP")
-            logging.error(response_dpop.json())
+            logger.error("Error retrying with new DPoP")
+            logger.error(response_dpop.json())
         response_dpop.raise_for_status()
     else:
-        logging.error("Error sending PAR request")
-        logging.error(response.json())
+        logger.error("Error sending PAR request")
+        logger.error(response.json())
         response.raise_for_status()
 
     # Parse the JSON response
