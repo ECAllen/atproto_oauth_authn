@@ -11,24 +11,34 @@ from dataclasses import dataclass
 from urllib.parse import urlparse
 
 import httpx
+import urllib
 from validators import ValidationError
 
-from .security import valid_url
-from .exceptions import MetadataError, OauthFlowError, SecurityError, InvalidParameterError, TokenRequestError
+from .security import valid_url, create_hardened_client
+from .exceptions import (
+    MetadataError,
+    OauthFlowError,
+    SecurityError,
+    InvalidParameterError,
+    TokenRequestError,
+)
 
 from joserfc.jwk import ECKey
 from authlib.common.security import generate_token
+from authlib.oauth2.rfc7636 import create_s256_code_challenge
 from joserfc import jwt
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class PARRequestContext:
     """Context for performing a PAR request with all necessary parameters."""
+
     par_endpoint: str
     response_type: str
     code_challenge: str
-    code_challenge_method: str    
+    code_challenge_method: str
     state: str
     client_id: str
     redirect_uri: str
@@ -39,7 +49,6 @@ class PARRequestContext:
     app_url: str | None = None
     dpop_proof: str | None = None
     dpop_private_jwk: ECKey | None = None
-
 
     def __post_init__(self):
         """Validate required parameters after initialization."""
@@ -67,6 +76,7 @@ class PARRequestContext:
             "client_assertion": self.client_assertion,
         }
 
+
 def build_client_config(app_url: str) -> Tuple[str, str]:
     """Build client_id and redirect_uri from app_url.
 
@@ -85,6 +95,7 @@ def build_client_config(app_url: str) -> Tuple[str, str]:
         redirect_uri = "http://127.0.01/oauth/callback"
 
     return client_id, redirect_uri
+
 
 def get_pds_metadata(pds_url: str) -> Dict[str, Any]:
     """
@@ -165,6 +176,7 @@ def extract_auth_server(metadata: Dict[str, Any]) -> List[str]:
     logger.error(error_msg)
     raise MetadataError(error_msg)
 
+
 def get_pds_auth_server_metadata(
     auth_servers: List[str],
 ) -> dict:
@@ -187,7 +199,9 @@ def get_pds_auth_server_metadata(
         raise MetadataError(error_msg)
 
     for auth_server in auth_servers:
-        metadata_url = f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
+        metadata_url = (
+            f"{auth_server.rstrip('/')}/.well-known/oauth-authorization-server"
+        )
         logger.info("Trying to fetch auth server metadata from: %s", metadata_url)
 
         # Check URL for SSRF vulnerabilities
@@ -205,17 +219,15 @@ def get_pds_auth_server_metadata(
         return metadata
 
 
-
 def initial_token_request(
     authn_metadata: dict,
     code: str,
     app_url: str,
     client_secret_jwk: ECKey,
 ) -> Tuple[dict, str]:
-
     authserver_url = authn_metadata["iss"]
 
-    #TODO is this necessary?
+    # TODO is this necessary?
     # Re-fetch server metadata
     authserver_meta = get_pds_auth_server_metadata([authserver_url])
 
@@ -244,23 +256,21 @@ def initial_token_request(
         logger.info("✅ Token endpoint valid.")
     except ValidationError as e:
         logger.error(f"Token endpoint {token_endpoint} validation error {e}")
-        raise TokenRequestError 
+        raise TokenRequestError
 
-    dpop_private_jwk = ECKey.import_key(
-        json.loads(authn_metadata["dpop_private_jwk"])
-    )
+    dpop_private_jwk = ECKey.import_key(json.loads(authn_metadata["dpop_private_jwk"]))
 
     dpop_nonce = authn_metadata["dpop_nonce"]
-    
+
     dpop_proof = authserver_dpop_jwt(
         method="POST",
-        url=token_endpoint, 
+        url=token_endpoint,
         dpop_private_jwk=dpop_private_jwk,
         nonce=dpop_nonce,
     )
 
-    with httpx.Client(timeout=60.0,follow_redirects=False,verify=True,trust_env=False) as client:
-        response = client.post(token_endpoint, headers={"DPoP": dpop_proof}, data=data)
+    client = create_hardened_client()
+    response = client.post(token_endpoint, headers={"DPoP": dpop_proof}, data=data)
 
     logger.debug(f"Response: {response.json()}")
 
@@ -271,38 +281,67 @@ def initial_token_request(
             method="POST",
             url=token_endpoint,
             nonce=dpop_nonce,
-            dpop_private_jwk=dpop_private_jwk
+            dpop_private_jwk=dpop_private_jwk,
         )
 
         try:
-            with httpx.Client(timeout=10.0,follow_redirects=False,verify=True,trust_env=False) as client:
-                response = client.post(token_endpoint, headers={"DPoP": dpop_proof}, data=data)
+            with httpx.Client(
+                timeout=10.0, follow_redirects=False, verify=True, trust_env=False
+            ) as client:
+                response = client.post(
+                    token_endpoint, headers={"DPoP": dpop_proof}, data=data
+                )
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error occurred: {e.response.status_code} - {e.response.text}") 
-            raise TokenRequestError   
+            logger.error(
+                f"HTTP error occurred: {e.response.status_code} - {e.response.text}"
+            )
+            raise TokenRequestError
 
     response.raise_for_status()
 
+    # TODO proper exception handling
     token = response.json()
 
     return token, dpop_nonce
- 
+
+
+# A resource server may signal the need for a [new] DPoP nonce via one of two methods
+# 1. WWW-Authenticate header with paramater error="use_dpop_nonce"
+#    (see https://datatracker.ietf.org/doc/html/rfc9449#RSNonce)
+# 2. JSON response body with field error="use_dpop_nonce"
+# The latter is only supposed to be returned by an
+# Authorization Server (see https://datatracker.ietf.org/doc/html/rfc9449#name-authorization-server-provid), but we support it anyway.
+def use_dpop_nonce_response(resp: httpx.Response):
+    if resp.status_code not in [400, 401]:
+        return False
+
+    www_authenticate = resp.headers.get("WWW-Authenticate")
+    if www_authenticate:
+        scheme, _, params = www_authenticate.partition(" ")
+        items = urllib.request.parse_http_list(params)
+        opts = urllib.request.parse_keqv_list(items)
+        if scheme.lower() == "dpop" and opts.get("error") == "use_dpop_nonce":
+            return True
+
+    json_body = resp.json()
+    if isinstance(json_body, dict) and json_body.get("error") == "use_dpop_nonce":
+        return True
+
+    return False
+
+
 def authserver_dpop_jwt(
     method: str, url: str, dpop_private_jwk: ECKey, nonce: str | None = None
 ) -> str:
     dpop_pub_jwk = dpop_private_jwk.as_dict(private=False)
 
     # This should ONLY contain: kty, crv, x, y (no 'd' parameter)
-    if 'd' in dpop_pub_jwk:
+    if "d" in dpop_pub_jwk:
         logger.error("❌ ERROR: Private key 'd' parameter found in public JWK!")
     else:
         logger.info("✅ Good: No private key material in JWK")
 
-    header = {
-        "typ": "dpop+jwt",
-        "alg": "ES256",
-        "jwk": dpop_pub_jwk
-        }
+    header = {"typ": "dpop+jwt", "alg": "ES256", "jwk": dpop_pub_jwk}
 
     body = {
         "jti": generate_token(),
@@ -322,12 +361,47 @@ def authserver_dpop_jwt(
     )
 
     if isinstance(dpop_proof, bytes):
-        dpop_proof = dpop_proof.decode('utf-8')
+        dpop_proof = dpop_proof.decode("utf-8")
 
+    # decoded = jwt.decode(dpop_proof, dpop_private_jwk)
 
-    # decoded = jwt.decode(dpop_proof, dpop_private_jwk) 
-    
     return dpop_proof
+
+
+def pds_dpop_jwt(
+    method: str,
+    url: str,
+    dpop_private_jwk: ECKey,
+    access_token: str,
+    nonce: str | None = None,
+) -> str:
+    dpop_pub_jwk = dpop_private_jwk.as_dict(private=False)
+
+    header = {"typ": "dpop+jwt", "alg": "ES256", "jwk": dpop_pub_jwk}
+
+    body = {
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 10,
+        "jti": generate_token(),
+        "htm": method,
+        "htu": url,
+        "ath": create_s256_code_challenge(access_token),
+    }
+
+    if nonce:
+        body["nonce"] = nonce
+
+    dpop_proof = jwt.encode(
+        header,
+        body,
+        dpop_private_jwk,
+    )
+
+    if isinstance(dpop_proof, bytes):
+        dpop_proof = dpop_proof.decode("utf-8")
+
+    return dpop_proof
+
 
 def client_assertion_jwt(
     client_id: str, auth_endpoint: str, client_secret_jwk: ECKey
@@ -341,8 +415,9 @@ def client_assertion_jwt(
         "iat": int(time.time()),
     }
     client_assertion = jwt.encode(header, claims, client_secret_jwk)
-    
+
     return client_assertion
+
 
 def generate_oauth_state() -> str:
     """
@@ -361,6 +436,7 @@ def generate_oauth_state() -> str:
     state = secrets.token_hex(32)
     logger.info("Generated OAuth state parameter (%d characters)", len(state))
     return state
+
 
 def generate_code_challenge(code_verifier: str) -> str:
     """
@@ -430,21 +506,24 @@ def send_par_request(
 
     if response.status_code == 400 and response.json()["error"] == "use_dpop_nonce":
         dpop_authserver_nonce = response.headers["DPoP-Nonce"]
-        #TODO try needed?s
+        # TODO try needed?s
         dpop_proof = authserver_dpop_jwt(
-            method="POST", url=context.par_endpoint, nonce=dpop_authserver_nonce, dpop_private_jwk=context.dpop_private_jwk
+            method="POST",
+            url=context.par_endpoint,
+            nonce=dpop_authserver_nonce,
+            dpop_private_jwk=context.dpop_private_jwk,
         )
 
         logger.info("Retrying with new auth server DPoP nonce")
         response_dpop = httpx.post(
             context.par_endpoint,
             headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "DPoP": dpop_proof,
+                "Content-Type": "application/x-www-form-urlencoded",
+                "DPoP": dpop_proof,
             },
             data=context.par_request_body(),
         )
-        if 'error' in response_dpop.json():
+        if "error" in response_dpop.json():
             logger.error("Error retrying with new DPoP")
             logger.error(response_dpop.json())
         response_dpop.raise_for_status()
@@ -456,7 +535,7 @@ def send_par_request(
     # Parse the JSON response
     data = response_dpop.json()
     logger.info("PAR request successful")
-    #TODO make this debug later
+    # TODO make this debug later
     logger.info(f"{data}")
 
     return dpop_authserver_nonce, response_dpop

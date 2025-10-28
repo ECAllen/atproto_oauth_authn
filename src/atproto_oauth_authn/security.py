@@ -2,12 +2,38 @@
 
 import logging
 from typing import Set
-
 import validators
 from validators.utils import validator
 from urllib.parse import urlparse
+import httpx
 
 logger = logging.getLogger(__name__)
+
+
+def create_hardened_client(timeout_seconds: int = 30) -> httpx.Client:
+    """Create a hardened HTTP client with security settings and timeouts.
+
+    Args:
+        timeout_seconds: Request timeout in seconds
+
+    Returns:
+        Configured httpx.Client instance
+    """
+    return httpx.Client(
+        timeout=httpx.Timeout(
+            connect=10.0,  # Time to establish connection
+            read=timeout_seconds,  # Time to read response
+            write=10.0,  # Time to send request
+            pool=5.0,  # Time to get connection from pool
+        ),
+        limits=httpx.Limits(
+            max_keepalive_connections=5, max_connections=10, keepalive_expiry=30.0
+        ),
+        follow_redirects=False,  # Don't follow redirects automatically for security
+        verify=True,  # Verify SSL certificates
+        http2=True,  # Enable HTTP/2 for better performance
+    )
+
 
 # Known AT Protocol domains
 KNOWN_AT_PROTOCOL_DOMAINS: Set[str] = {
@@ -26,6 +52,7 @@ KNOWN_AT_PROTOCOL_DOMAINS: Set[str] = {
     # Add more known domains as needed
 }
 
+
 @validator
 def _is_internal_hostname(hostname: str) -> bool:
     """Validate against internal hostnames."""
@@ -40,6 +67,7 @@ def _is_internal_hostname(hostname: str) -> bool:
         return False
     return True
 
+
 @validator
 def _check_domain_whitelist(hostname: str) -> bool:
     """Check if hostname is in the AT Protocol domain whitelist."""
@@ -50,17 +78,20 @@ def _check_domain_whitelist(hostname: str) -> bool:
             return True
     return False
 
+
 @validator
 def _check_url_creds(url_parts) -> bool:
     if url_parts.username or url_parts.password:
         return False
     return True
 
+
 # Used in the validator ti check the
 def validate_scheme(scheme: str) -> bool:
     if scheme == "https":
         return True
     return False
+
 
 def valid_url(url: str):
     """
@@ -83,13 +114,13 @@ def valid_url(url: str):
 
     url_parts = urlparse(url)
 
-    try:  
+    try:
         validators.url(
             value=url,
             skip_ipv6_addr=True,
             skip_ipv4_addr=True,
             may_have_port=False,
-            validate_scheme=validate_scheme
+            validate_scheme=validate_scheme,
         )
 
         # Validate against internal hostnames
@@ -104,3 +135,4 @@ def valid_url(url: str):
         logger.error(f"URL validation error {e}")
         raise validators.ValidationError from e
     return
+
