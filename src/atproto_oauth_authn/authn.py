@@ -91,6 +91,7 @@ def get_pds_auth_servers(pds_url: str) -> List:
 
     return auth_servers
 
+
 def get_authn_url(
     username: str,
     app_url: str,
@@ -119,7 +120,8 @@ def get_authn_url(
 
     auth_server_metadata = get_pds_auth_server_metadata(auth_servers)
     par_endpoint = auth_server_metadata["pushed_authorization_request_endpoint"]
-    
+    revocation_endpoint = auth_server_metadata["revocation_endpoint"]
+
     # Generate OAuth parameters
     code_verifier = generate_token(48)
     state = generate_token()
@@ -128,7 +130,9 @@ def get_authn_url(
     client_id, redirect_uri = build_client_config(app_url)
 
     client_assertion = client_assertion_jwt(client_id, auth_endpoint, client_secret_jwk)
-    logging.info("Generated client assertion JWT for client_assertion: %s", client_assertion)
+    logging.info(
+        "Generated client assertion JWT for client_assertion: %s", client_assertion
+    )
 
     dpop_proof = authserver_dpop_jwt(
         method="POST", url=par_endpoint, dpop_private_jwk=dpop_private_jwk
@@ -165,4 +169,5 @@ def get_authn_url(
         user_did,
         pds_url,
         client_id,
+        revocation_endpoint,
     )

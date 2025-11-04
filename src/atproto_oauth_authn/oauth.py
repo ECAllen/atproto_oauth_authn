@@ -219,6 +219,67 @@ def get_pds_auth_server_metadata(
         return metadata
 
 
+def auth_server_post(
+    authserver_url: str,
+    client_id: str,
+    client_secret_jwk: ECKey,
+    dpop_private_jwk: ECKey,
+    dpop_authserver_nonce: str,
+    post_url: str,
+    post_data: dict,
+) -> Tuple[str, httpx.Response]:
+    client_assertion = client_assertion_jwt(
+        client_id, authserver_url, client_secret_jwk
+    )
+
+    post_data |= {
+        "client_id": client_id,
+        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        "client_assertion": client_assertion,
+    }
+
+    if not isinstance(dpop_private_jwk, ECKey):
+        dpop_private_jwk = ECKey.import_key(json.loads(dpop_private_jwk))
+
+    # Create DPoP header JWT
+    dpop_proof = authserver_dpop_jwt(
+        method="POST",
+        url=post_url,
+        nonce=dpop_authserver_nonce,
+        dpop_private_jwk=dpop_private_jwk,
+    )
+
+    # SSRF mitigations are needed
+    try:
+        valid_url(post_url)
+    except SecurityError as e:
+        raise e
+
+    client = create_hardened_client()
+    response = client.post(post_url, data=post_data, headers={"DPoP": dpop_proof})
+    dpop_authserver_nonce = response.headers["DPoP-Nonce"]
+
+    # Handle DPoP missing/invalid nonce error by retrying with server-provided nonce
+    if dpop_nonce_retry(response):
+        dpop_authserver_nonce = response.headers["DPoP-Nonce"]
+        logging.debug(
+            f"retrying with new auth server DPoP nonce: {dpop_authserver_nonce}"
+        )
+        dpop_proof = authserver_dpop_jwt(
+            method="POST",
+            url=post_url,
+            nonce=dpop_authserver_nonce,
+            dpop_private_jwk=dpop_private_jwk,
+        )
+        response = client.post(post_url, data=post_data, headers={"DPoP": dpop_proof})
+        dpop_authserver_nonce = response.headers["DPoP-Nonce"]
+
+    return dpop_authserver_nonce, response
+
+
+# Prepares and sends a pushed auth request (PAR) via HTTP POST to the Authorization Server.
+
+
 def initial_token_request(
     authn_metadata: dict,
     code: str,
@@ -311,7 +372,7 @@ def initial_token_request(
 # 2. JSON response body with field error="use_dpop_nonce"
 # The latter is only supposed to be returned by an
 # Authorization Server (see https://datatracker.ietf.org/doc/html/rfc9449#name-authorization-server-provid), but we support it anyway.
-def use_dpop_nonce_response(resp: httpx.Response):
+def dpop_nonce_retry(resp: httpx.Response):
     if resp.status_code not in [400, 401]:
         return False
 
@@ -338,6 +399,7 @@ def authserver_dpop_jwt(
     # This should ONLY contain: kty, crv, x, y (no 'd' parameter)
     if "d" in dpop_pub_jwk:
         logger.error("❌ ERROR: Private key 'd' parameter found in public JWK!")
+        raise Exception("❌ ERROR: Private key 'd' parameter found in public JWK.")
     else:
         logger.info("✅ Good: No private key material in JWK")
 
