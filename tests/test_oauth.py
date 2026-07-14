@@ -1,5 +1,8 @@
 """Tests for OAuth functionality."""
 
+# Pytest fixtures work by shadowing the fixture name in test signatures
+# pylint: disable=redefined-outer-name
+
 import json
 import re
 from unittest.mock import patch, Mock
@@ -272,7 +275,7 @@ def test_auth_server_post_success_without_nonce_header():
     """A response with no DPoP-Nonce header keeps the incoming nonce (was a KeyError)."""
     success = make_response(200, {"ok": True})
 
-    (nonce, response), client = call_auth_server_post([success])
+    (nonce, response), _ = call_auth_server_post([success])
 
     assert nonce == "incoming-nonce"
     assert response is success

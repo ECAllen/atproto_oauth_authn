@@ -12,6 +12,7 @@ The script:
 Required environment variables:
 - USERNAME: The Bluesky handle or DID to authenticate (e.g., "user.bsky.social")
 - APP_URL: Your application's URL for OAuth callbacks
+- CLIENT_SECRET_JWK: The client's secret signing key (see generate_jwk.py)
 
 Usage:
     python examples/bluesky_social_auth.py
@@ -20,16 +21,18 @@ The script will log detailed information about the OAuth flow process and
 automatically open your browser to complete the authentication.
 """
 
+import json
 import logging
-import time
 import os
 import sys
-import webbrowser
-import json
-from dotenv import load_dotenv
-import atproto_oauth_authn
-from joserfc.jwk import ECKey
+import time
 import urllib.parse
+import webbrowser
+
+from dotenv import load_dotenv
+from joserfc.jwk import ECKey
+
+import atproto_oauth_authn
 
 
 # Set up logging configuration
@@ -44,7 +47,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def main() -> bool:
+def main() -> bool:  # pylint: disable=too-many-locals
     """
     Main function to initiate Bluesky OAuth authentication flow.
 
@@ -58,21 +61,21 @@ def main() -> bool:
     Environment Variables Required:
         USERNAME: Bluesky handle or DID to authenticate
         APP_URL: Application URL for OAuth callbacks
+        CLIENT_SECRET_JWK: The client's secret signing key
     """
     load_dotenv()
 
-    # This is a "confidential" OAuth client, meaning it has access 
-    # to a persistent secret signing key. parse that key as a global.
+    # This is a "confidential" OAuth client, meaning it has access
+    # to a persistent secret signing key.
     env_key = os.getenv("CLIENT_SECRET_JWK")
     if env_key is None:
-        logging.error("CLIENT_SECRET_JWK not set, please generate with the generate_jwk.py and add into .env")
+        logger.error(
+            "CLIENT_SECRET_JWK not set, please generate with generate_jwk.py "
+            "and add into .env"
+        )
         sys.exit(1)
 
-    jwk_key = json.loads(env_key)
-    CLIENT_SECRET_JWK = ECKey.import_key(jwk_key)
-
-    # Create the public key dict
-    public_key = CLIENT_SECRET_JWK.as_dict(private=False)
+    client_secret_jwk = ECKey.import_key(json.loads(env_key))
 
     username = os.getenv("USERNAME")
     if not username:
@@ -86,18 +89,34 @@ def main() -> bool:
         print("Error: Missing APP_URL environment variable")
         return False
 
-    logging.info("Starting OAuth flow for username: %s", username)
+    logger.info("Starting OAuth flow for username: %s", username)
 
     # Generate DPoP private signing key for early binding during the PAR request.
     now = int(time.time())
     parameters = {"kid": f"dpop-par-request-{now}"}
-    dpop_private_jwk  = ECKey.generate_key(
-        'P-256', parameters=parameters)
-    
+    dpop_private_jwk = ECKey.generate_key("P-256", parameters=parameters)
 
-    code_verifier, state, dpop_nonce, response, auth_server_metadata, user_did, pds_url, client_id = atproto_oauth_authn.get_authn_url(username, app_url, client_secret_jwk=CLIENT_SECRET_JWK, dpop_private_jwk=dpop_private_jwk)
+    # A real application would persist code_verifier, state, dpop_nonce,
+    # user_did, pds_url, and revocation_endpoint in the user's session for
+    # the callback and token request steps.
+    (
+        _code_verifier,
+        _state,
+        _dpop_nonce,
+        response,
+        auth_server_metadata,
+        _user_did,
+        _pds_url,
+        client_id,
+        _revocation_endpoint,
+    ) = atproto_oauth_authn.get_authn_url(
+        username,
+        app_url,
+        client_secret_jwk=client_secret_jwk,
+        dpop_private_jwk=dpop_private_jwk,
+    )
 
-    request_uri = response['request_uri']
+    request_uri = response["request_uri"]
     auth_endpoint = auth_server_metadata["authorization_endpoint"]
 
     # Build final auth URL
@@ -106,7 +125,8 @@ def main() -> bool:
     )
     authn_url = f"{auth_endpoint}?{qparam}"
 
-    assert atproto_oauth_authn.security.is_safe_url(authn_url)
+    # Raises SecurityError if the URL fails SSRF checks
+    atproto_oauth_authn.valid_url(authn_url)
 
     # Open the browser with the authorization URL
     webbrowser.open(authn_url)

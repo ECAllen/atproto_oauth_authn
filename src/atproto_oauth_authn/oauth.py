@@ -1,19 +1,22 @@
 """OAuth functionality for AT Protocol."""
 
-import logging
-import secrets
 import base64
 import hashlib
 import json
+import logging
+import secrets
 import time
-from typing import List, Tuple, Dict, Any
+import urllib.request
 from dataclasses import dataclass
+from typing import List, Tuple, Dict, Any
 from urllib.parse import urlparse
 
 import httpx
-import urllib
+from authlib.common.security import generate_token
+from authlib.oauth2.rfc7636 import create_s256_code_challenge
+from joserfc import jwt
+from joserfc.jwk import ECKey
 
-from .security import valid_url, create_hardened_client
 from .exceptions import (
     MetadataError,
     OauthFlowError,
@@ -21,17 +24,13 @@ from .exceptions import (
     InvalidParameterError,
     TokenRequestError,
 )
-
-from joserfc.jwk import ECKey
-from authlib.common.security import generate_token
-from authlib.oauth2.rfc7636 import create_s256_code_challenge
-from joserfc import jwt
+from .security import valid_url, create_hardened_client
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class PARRequestContext:
+class PARRequestContext:  # pylint: disable=too-many-instance-attributes
     """Context for performing a PAR request with all necessary parameters."""
 
     par_endpoint: str
@@ -63,6 +62,7 @@ class PARRequestContext:
             raise InvalidParameterError("scope is required")
 
     def par_request_body(self):
+        """Build the form body for the PAR request."""
         return {
             "response_type": self.response_type,
             "code_challenge": self.code_challenge,
@@ -243,7 +243,7 @@ def get_pds_auth_server_metadata(
     raise MetadataError(error_msg)
 
 
-def auth_server_post(
+def auth_server_post(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     authserver_url: str,
     client_id: str,
     client_secret_jwk: ECKey,
@@ -252,6 +252,12 @@ def auth_server_post(
     post_url: str,
     post_data: dict,
 ) -> Tuple[str, httpx.Response]:
+    """POST to the auth server with client assertion and DPoP proof, retrying
+    once if the server demands a new DPoP nonce.
+
+    Returns:
+        A tuple containing (dpop_authserver_nonce, response)
+    """
     client_assertion = client_assertion_jwt(
         client_id, authserver_url, client_secret_jwk
     )
@@ -297,8 +303,8 @@ def auth_server_post(
             raise OauthFlowError(error_msg)
 
         dpop_authserver_nonce = server_nonce
-        logging.debug(
-            f"retrying with new auth server DPoP nonce: {dpop_authserver_nonce}"
+        logger.debug(
+            "retrying with new auth server DPoP nonce: %s", dpop_authserver_nonce
         )
         dpop_proof = authserver_dpop_jwt(
             method="POST",
@@ -325,15 +331,23 @@ def auth_server_post(
 # Prepares and sends a pushed auth request (PAR) via HTTP POST to the Authorization Server.
 
 
-def initial_token_request(
+def initial_token_request(  # pylint: disable=too-many-locals,too-many-statements
     authn_metadata: dict,
     code: str,
     app_url: str,
     client_secret_jwk: ECKey,
 ) -> Tuple[dict, str]:
+    """Exchange the authorization code for tokens at the auth server.
+
+    Returns:
+        A tuple containing (token_response, dpop_nonce)
+
+    Raises:
+        TokenRequestError: If the token request fails
+    """
     authserver_url = authn_metadata["iss"]
 
-    # TODO is this necessary?
+    # TODO is this necessary?  # pylint: disable=fixme
     # Re-fetch server metadata
     authserver_meta = get_pds_auth_server_metadata([authserver_url])
 
@@ -353,7 +367,7 @@ def initial_token_request(
         "client_assertion": client_assertion,
     }
 
-    logger.debug(f"Data: {data}")
+    logger.debug("Data: %s", data)
 
     # Create DPoP header JWT, using the existing DPoP signing key for this account/session
     token_endpoint = authserver_meta["token_endpoint"]
@@ -361,7 +375,7 @@ def initial_token_request(
         valid_url(token_endpoint)
         logger.info("✅ Token endpoint valid.")
     except SecurityError as e:
-        logger.error(f"Token endpoint {token_endpoint} validation error {e}")
+        logger.error("Token endpoint %s validation error %s", token_endpoint, e)
         raise TokenRequestError(
             f"Token endpoint failed security validation: {token_endpoint}"
         ) from e
@@ -449,13 +463,17 @@ def _response_error_code(response: httpx.Response) -> str | None:
     return None
 
 
-# A resource server may signal the need for a [new] DPoP nonce via one of two methods
-# 1. WWW-Authenticate header with paramater error="use_dpop_nonce"
-#    (see https://datatracker.ietf.org/doc/html/rfc9449#RSNonce)
-# 2. JSON response body with field error="use_dpop_nonce"
-# The latter is only supposed to be returned by an
-# Authorization Server (see https://datatracker.ietf.org/doc/html/rfc9449#name-authorization-server-provid), but we support it anyway.
 def dpop_nonce_retry(resp: httpx.Response):
+    """Return True if the response signals the need for a [new] DPoP nonce.
+
+    A server may signal this via one of two methods:
+    1. WWW-Authenticate header with parameter error="use_dpop_nonce"
+       (see https://datatracker.ietf.org/doc/html/rfc9449#RSNonce)
+    2. JSON response body with field error="use_dpop_nonce"
+       The latter is only supposed to be returned by an Authorization Server
+       (see https://datatracker.ietf.org/doc/html/rfc9449, "Authorization
+       Server-Provided Nonce"), but we support it anyway.
+    """
     if resp.status_code not in [400, 401]:
         return False
 
@@ -476,6 +494,7 @@ def dpop_nonce_retry(resp: httpx.Response):
 def authserver_dpop_jwt(
     method: str, url: str, dpop_private_jwk: ECKey, nonce: str | None = None
 ) -> str:
+    """Create a DPoP proof JWT for a request to the authorization server."""
     dpop_pub_jwk = dpop_private_jwk.as_dict(private=False)
 
     # This should ONLY contain: kty, crv, x, y (no 'd' parameter)
@@ -518,6 +537,7 @@ def pds_dpop_jwt(
     access_token: str,
     nonce: str | None = None,
 ) -> str:
+    """Create a DPoP proof JWT for a request to the PDS, bound to the access token."""
     dpop_pub_jwk = dpop_private_jwk.as_dict(private=False)
 
     header = {"typ": "dpop+jwt", "alg": "ES256", "jwk": dpop_pub_jwk}
@@ -549,6 +569,7 @@ def pds_dpop_jwt(
 def client_assertion_jwt(
     client_id: str, auth_endpoint: str, client_secret_jwk: ECKey
 ) -> str:
+    """Create a signed client assertion JWT for confidential client auth."""
     header = {"alg": "ES256", "kid": client_secret_jwk["kid"]}
     claims = {
         "iss": client_id,
@@ -636,7 +657,7 @@ def send_par_request(
             f"PAR endpoint failed security validation: {context.par_endpoint}"
         ) from e
 
-    logger.debug(f"PAR request body: {context.par_request_body()}")
+    logger.debug("PAR request body: %s", context.par_request_body())
 
     # First PAR request
     logger.info("Sending PAR request to: %s", context.par_endpoint)

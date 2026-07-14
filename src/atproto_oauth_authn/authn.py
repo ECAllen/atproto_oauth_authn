@@ -67,12 +67,13 @@ def resolve_user_did(username: str) -> str:
     return pds_url, user_did
 
 
-# TODO re-org to atproto specific file
+# TODO re-org to atproto specific file  # pylint: disable=fixme
 def get_pds_auth_servers(pds_url: str) -> List:
+    """Discover the authorization servers for a PDS from its metadata."""
     try:
         valid_url(pds_url)
     except SecurityError as e:
-        logger.error(f"The PDS URL failed validation {e}")
+        logger.error("The PDS URL failed validation %s", e)
         raise
 
     # Get the PDS server metadata from the well-known endpoint
@@ -92,7 +93,7 @@ def get_pds_auth_servers(pds_url: str) -> List:
     return auth_servers
 
 
-def get_authn_url(
+def get_authn_url(  # pylint: disable=too-many-locals
     username: str,
     app_url: str,
     dpop_private_jwk: ECKey | None = None,

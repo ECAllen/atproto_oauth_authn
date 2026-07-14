@@ -76,16 +76,15 @@ def resolve_identity(username: str) -> str:
             logger.debug("Resolved handle %s to DID: %s", username, did)
             return did
 
-        error_msg = (
-            f"Failed to resolve handle: {username}. No DID found in response"
-        )
+        error_msg = f"Failed to resolve handle: {username}. No DID found in response"
         logger.info(error_msg)
         raise IdentityResolutionError(error_msg)
-    elif re.match(DID_RE, username):
+
+    if re.match(DID_RE, username):
         # If the username is already a DID, return it directly
         logger.info("Username is already a DID: %s", username)
         return username
-    else:
-        error_msg = f"Username '{username}' is neither a valid handle nor a DID"
-        logger.warning(error_msg)
-        raise IdentityResolutionError(error_msg)
+
+    error_msg = f"Username '{username}' is neither a valid handle nor a DID"
+    logger.warning(error_msg)
+    raise IdentityResolutionError(error_msg)
