@@ -12,7 +12,6 @@ from urllib.parse import urlparse
 
 import httpx
 import urllib
-from validators import ValidationError
 
 from .security import valid_url, create_hardened_client
 from .exceptions import (
@@ -126,9 +125,19 @@ def get_pds_metadata(pds_url: str) -> Dict[str, Any]:
         logger.error("Security check failed for URL: %s", metadata_url)
         raise
 
-    response = httpx.get(metadata_url)
-    response.raise_for_status()
-    metadata = response.json()
+    try:
+        response = httpx.get(metadata_url)
+        response.raise_for_status()
+        metadata = response.json()
+    except httpx.HTTPError as e:
+        error_msg = f"Failed to retrieve PDS metadata from {metadata_url}: {e}"
+        logger.error(error_msg)
+        raise MetadataError(error_msg) from e
+    except ValueError as e:
+        error_msg = f"PDS metadata from {metadata_url} is not valid JSON"
+        logger.error(error_msg)
+        raise MetadataError(error_msg) from e
+
     logger.info("Successfully retrieved PDS metadata")
 
     return metadata
@@ -183,11 +192,14 @@ def get_pds_auth_server_metadata(
     """
     Retrieve the OAuth authorization server metadata from the first available server.
 
+    Servers are tried in order; a server that fails is skipped and the next
+    one is tried.
+
     Args:
         auth_servers: List of authorization server URLs
 
     Returns:
-        A tuple containing (metadata, auth_endpoint, token_endpoint, par_endpoint)
+        The auth server metadata as a dictionary
 
     Raises:
         MetadataError: If metadata cannot be retrieved from any server
@@ -207,16 +219,28 @@ def get_pds_auth_server_metadata(
         # Check URL for SSRF vulnerabilities
         try:
             valid_url(metadata_url)  # Raises SecurityError if unsafe
-        except Exception as e:
-            logger.error(f"PDS Auth server metadata URL validation failed: {e}")
-            raise ValidationError
+        except SecurityError:
+            logger.error("Security check failed for URL: %s", metadata_url)
+            raise
 
-        response = httpx.get(metadata_url)
-        response.raise_for_status()
+        try:
+            response = httpx.get(metadata_url)
+            response.raise_for_status()
+            metadata = response.json()
+        except (httpx.HTTPError, ValueError) as e:
+            logger.warning(
+                "Failed to retrieve auth server metadata from %s: %s", auth_server, e
+            )
+            continue
 
-        metadata = response.json()
         logger.info("Successfully retrieved auth server metadata from %s", auth_server)
         return metadata
+
+    error_msg = (
+        f"Failed to retrieve metadata from any authorization server: {auth_servers}"
+    )
+    logger.error(error_msg)
+    raise MetadataError(error_msg)
 
 
 def auth_server_post(
@@ -249,19 +273,30 @@ def auth_server_post(
         dpop_private_jwk=dpop_private_jwk,
     )
 
-    # SSRF mitigations are needed
-    try:
-        valid_url(post_url)
-    except SecurityError as e:
-        raise e
+    # SSRF mitigations; raises SecurityError if unsafe
+    valid_url(post_url)
 
     client = create_hardened_client()
-    response = client.post(post_url, data=post_data, headers={"DPoP": dpop_proof})
-    dpop_authserver_nonce = response.headers["DPoP-Nonce"]
+    try:
+        response = client.post(post_url, data=post_data, headers={"DPoP": dpop_proof})
+    except httpx.RequestError as e:
+        error_msg = f"POST to auth server {post_url} failed: {e}"
+        logger.error(error_msg)
+        raise OauthFlowError(error_msg) from e
+
+    dpop_authserver_nonce = response.headers.get("DPoP-Nonce", dpop_authserver_nonce)
 
     # Handle DPoP missing/invalid nonce error by retrying with server-provided nonce
     if dpop_nonce_retry(response):
-        dpop_authserver_nonce = response.headers["DPoP-Nonce"]
+        server_nonce = response.headers.get("DPoP-Nonce")
+        if not server_nonce:
+            error_msg = (
+                "Auth server demanded a DPoP nonce but sent no DPoP-Nonce header"
+            )
+            logger.error(error_msg)
+            raise OauthFlowError(error_msg)
+
+        dpop_authserver_nonce = server_nonce
         logging.debug(
             f"retrying with new auth server DPoP nonce: {dpop_authserver_nonce}"
         )
@@ -271,8 +306,18 @@ def auth_server_post(
             nonce=dpop_authserver_nonce,
             dpop_private_jwk=dpop_private_jwk,
         )
-        response = client.post(post_url, data=post_data, headers={"DPoP": dpop_proof})
-        dpop_authserver_nonce = response.headers["DPoP-Nonce"]
+        try:
+            response = client.post(
+                post_url, data=post_data, headers={"DPoP": dpop_proof}
+            )
+        except httpx.RequestError as e:
+            error_msg = f"POST to auth server {post_url} failed: {e}"
+            logger.error(error_msg)
+            raise OauthFlowError(error_msg) from e
+
+        dpop_authserver_nonce = response.headers.get(
+            "DPoP-Nonce", dpop_authserver_nonce
+        )
 
     return dpop_authserver_nonce, response
 
@@ -315,9 +360,11 @@ def initial_token_request(
     try:
         valid_url(token_endpoint)
         logger.info("✅ Token endpoint valid.")
-    except ValidationError as e:
+    except SecurityError as e:
         logger.error(f"Token endpoint {token_endpoint} validation error {e}")
-        raise TokenRequestError
+        raise TokenRequestError(
+            f"Token endpoint failed security validation: {token_endpoint}"
+        ) from e
 
     dpop_private_jwk = ECKey.import_key(json.loads(authn_metadata["dpop_private_jwk"]))
 
@@ -331,12 +378,27 @@ def initial_token_request(
     )
 
     client = create_hardened_client()
-    response = client.post(token_endpoint, headers={"DPoP": dpop_proof}, data=data)
+    try:
+        response = client.post(token_endpoint, headers={"DPoP": dpop_proof}, data=data)
+    except httpx.RequestError as e:
+        error_msg = f"Token request to {token_endpoint} failed: {e}"
+        logger.error(error_msg)
+        raise TokenRequestError(error_msg) from e
 
-    logger.debug(f"Response: {response.json()}")
+    logger.debug("Token response status: %s", response.status_code)
 
-    if response.status_code == 400 and response.json()["error"] == "use_dpop_nonce":
-        dpop_nonce = response.headers["DPoP-Nonce"]
+    # Handle DPoP missing/invalid nonce error by retrying with server-provided nonce
+    if (
+        response.status_code in (400, 401)
+        and _response_error_code(response) == "use_dpop_nonce"
+    ):
+        dpop_nonce = response.headers.get("DPoP-Nonce")
+        if not dpop_nonce:
+            error_msg = (
+                "Auth server demanded a DPoP nonce but sent no DPoP-Nonce header"
+            )
+            logger.error(error_msg)
+            raise TokenRequestError(error_msg)
 
         dpop_proof = authserver_dpop_jwt(
             method="POST",
@@ -346,24 +408,45 @@ def initial_token_request(
         )
 
         try:
-            with httpx.Client(
-                timeout=10.0, follow_redirects=False, verify=True, trust_env=False
-            ) as client:
-                response = client.post(
-                    token_endpoint, headers={"DPoP": dpop_proof}, data=data
-                )
-        except httpx.HTTPStatusError as e:
-            logger.error(
-                f"HTTP error occurred: {e.response.status_code} - {e.response.text}"
+            response = client.post(
+                token_endpoint, headers={"DPoP": dpop_proof}, data=data
             )
-            raise TokenRequestError
+        except httpx.RequestError as e:
+            error_msg = f"Token request to {token_endpoint} failed: {e}"
+            logger.error(error_msg)
+            raise TokenRequestError(error_msg) from e
 
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        error_msg = (
+            f"Token request failed: {e.response.status_code} - {e.response.text}"
+        )
+        logger.error(error_msg)
+        raise TokenRequestError(error_msg) from e
 
-    # TODO proper exception handling
-    token = response.json()
+    try:
+        token = response.json()
+    except ValueError as e:
+        error_msg = "Token endpoint returned a non-JSON response"
+        logger.error(error_msg)
+        raise TokenRequestError(error_msg) from e
+
+    # Prefer the freshest nonce the server provided for future requests
+    dpop_nonce = response.headers.get("DPoP-Nonce", dpop_nonce)
 
     return token, dpop_nonce
+
+
+def _response_error_code(response: httpx.Response) -> str | None:
+    """Return the OAuth error code from a JSON error body, or None."""
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    if isinstance(body, dict):
+        return body.get("error")
+    return None
 
 
 # A resource server may signal the need for a [new] DPoP nonce via one of two methods
@@ -384,8 +467,7 @@ def dpop_nonce_retry(resp: httpx.Response):
         if scheme.lower() == "dpop" and opts.get("error") == "use_dpop_nonce":
             return True
 
-    json_body = resp.json()
-    if isinstance(json_body, dict) and json_body.get("error") == "use_dpop_nonce":
+    if _response_error_code(resp) == "use_dpop_nonce":
         return True
 
     return False
@@ -398,10 +480,9 @@ def authserver_dpop_jwt(
 
     # This should ONLY contain: kty, crv, x, y (no 'd' parameter)
     if "d" in dpop_pub_jwk:
-        logger.error("❌ ERROR: Private key 'd' parameter found in public JWK!")
-        raise Exception("❌ ERROR: Private key 'd' parameter found in public JWK.")
-    else:
-        logger.info("✅ Good: No private key material in JWK")
+        error_msg = "Private key 'd' parameter found in public JWK"
+        logger.error("❌ ERROR: %s!", error_msg)
+        raise SecurityError(error_msg)
 
     header = {"typ": "dpop+jwt", "alg": "ES256", "jwk": dpop_pub_jwk}
 
@@ -549,26 +630,44 @@ def send_par_request(
     # Check URL for SSRF vulnerabilities
     try:
         valid_url(context.par_endpoint)
-    except SecurityError:
+    except SecurityError as e:
         logger.error("Security check failed for URL: %s", context.par_endpoint)
-        raise OauthFlowError()
+        raise OauthFlowError(
+            f"PAR endpoint failed security validation: {context.par_endpoint}"
+        ) from e
 
     logger.debug(f"PAR request body: {context.par_request_body()}")
 
     # First PAR request
     logger.info("Sending PAR request to: %s", context.par_endpoint)
-    response = httpx.post(
-        context.par_endpoint,
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "DPoP": context.dpop_proof,
-        },
-        data=context.par_request_body(),
-    )
+    try:
+        response = httpx.post(
+            context.par_endpoint,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "DPoP": context.dpop_proof,
+            },
+            data=context.par_request_body(),
+        )
+    except httpx.RequestError as e:
+        error_msg = f"PAR request to {context.par_endpoint} failed: {e}"
+        logger.error(error_msg)
+        raise OauthFlowError(error_msg) from e
 
-    if response.status_code == 400 and response.json()["error"] == "use_dpop_nonce":
-        dpop_authserver_nonce = response.headers["DPoP-Nonce"]
-        # TODO try needed?s
+    dpop_authserver_nonce = response.headers.get("DPoP-Nonce")
+
+    # Handle DPoP missing/invalid nonce error by retrying with server-provided nonce
+    if (
+        response.status_code in (400, 401)
+        and _response_error_code(response) == "use_dpop_nonce"
+    ):
+        if not dpop_authserver_nonce:
+            error_msg = (
+                "Auth server demanded a DPoP nonce but sent no DPoP-Nonce header"
+            )
+            logger.error(error_msg)
+            raise OauthFlowError(error_msg)
+
         dpop_proof = authserver_dpop_jwt(
             method="POST",
             url=context.par_endpoint,
@@ -577,27 +676,31 @@ def send_par_request(
         )
 
         logger.info("Retrying with new auth server DPoP nonce")
-        response_dpop = httpx.post(
-            context.par_endpoint,
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "DPoP": dpop_proof,
-            },
-            data=context.par_request_body(),
+        try:
+            response = httpx.post(
+                context.par_endpoint,
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "DPoP": dpop_proof,
+                },
+                data=context.par_request_body(),
+            )
+        except httpx.RequestError as e:
+            error_msg = f"PAR request to {context.par_endpoint} failed: {e}"
+            logger.error(error_msg)
+            raise OauthFlowError(error_msg) from e
+
+        dpop_authserver_nonce = response.headers.get(
+            "DPoP-Nonce", dpop_authserver_nonce
         )
-        if "error" in response_dpop.json():
-            logger.error("Error retrying with new DPoP")
-            logger.error(response_dpop.json())
-        response_dpop.raise_for_status()
-    else:
-        logger.error("Error sending PAR request")
-        logger.error(response.json())
+
+    try:
         response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        error_msg = f"PAR request failed: {e.response.status_code} - {e.response.text}"
+        logger.error(error_msg)
+        raise OauthFlowError(error_msg) from e
 
-    # Parse the JSON response
-    data = response_dpop.json()
     logger.info("PAR request successful")
-    # TODO make this debug later
-    logger.info(f"{data}")
 
-    return dpop_authserver_nonce, response_dpop
+    return dpop_authserver_nonce, response

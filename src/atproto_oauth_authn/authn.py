@@ -7,11 +7,11 @@ with AT Protocol services like Bluesky.
 import logging
 from typing import Tuple, Any, List
 
-from validators import ValidationError
 from joserfc.jwk import ECKey
 from authlib.common.security import generate_token
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
 
+from .exceptions import SecurityError
 from .security import valid_url
 from .identity import resolve_identity
 from .did import retrieve_did_document, extract_pds_url
@@ -71,9 +71,9 @@ def resolve_user_did(username: str) -> str:
 def get_pds_auth_servers(pds_url: str) -> List:
     try:
         valid_url(pds_url)
-    except Exception as e:
-        logger.error(f"The PDS URL failed vaildation {e}")
-        raise ValidationError from e
+    except SecurityError as e:
+        logger.error(f"The PDS URL failed validation {e}")
+        raise
 
     # Get the PDS server metadata from the well-known endpoint
     try:
@@ -97,6 +97,7 @@ def get_authn_url(
     app_url: str,
     dpop_private_jwk: ECKey | None = None,
     client_secret_jwk: ECKey | None = None,
+    scope: str = "atproto transition:generic",
 ) -> Tuple[str, str, str, Any, dict]:
     """Generate an OAuth authorization URL for AT Protocol authentication.
 
@@ -106,6 +107,7 @@ def get_authn_url(
     Args:
         username: The AT Protocol username/handle to authenticate
         app_url: The base URL of the application (used for client_id and redirect_uri)
+        scope: OAuth scope string; defaults to "atproto transition:generic"
 
     Returns:
         The authorization URL that the user should be redirected to
@@ -147,7 +149,7 @@ def get_authn_url(
         login_hint=username,
         client_id=client_id,
         redirect_uri=redirect_uri,
-        scope="atproto transition:generic",
+        scope=scope,
         client_assertion_type="urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
         client_assertion=client_assertion,
         par_endpoint=par_endpoint,

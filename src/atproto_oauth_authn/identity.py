@@ -3,11 +3,10 @@
 import logging
 import re
 
-from validators import ValidationError
 import httpx
 
 from .security import valid_url
-from .exceptions import IdentityResolutionError
+from .exceptions import IdentityResolutionError, SecurityError
 
 logger = logging.getLogger(__name__)
 
@@ -55,13 +54,18 @@ def resolve_identity(username: str) -> str:
         # Check URL for SSRF vulnerabilities
         try:
             valid_url(url)
-        except ValidationError:
-            logger.error("ValidationError check failed for URL: %s", url)
+        except SecurityError:
+            logger.error("Security check failed for URL: %s", url)
             raise
 
-        # Make HTTP request to resolve handle to DID       
-        response = httpx.get(url)
-        response.raise_for_status()  # Raise exception for 4XX/5XX responses
+        # Make HTTP request to resolve handle to DID
+        try:
+            response = httpx.get(url)
+            response.raise_for_status()  # Raise exception for 4XX/5XX responses
+        except httpx.HTTPError as e:
+            error_msg = f"Failed to resolve handle {username}: {e}"
+            logger.warning(error_msg)
+            raise IdentityResolutionError(error_msg) from e
 
         # Parse the JSON response
         data = response.json()

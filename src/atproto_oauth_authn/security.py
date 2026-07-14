@@ -2,10 +2,12 @@
 
 import logging
 from typing import Set
-import validators
-from validators.utils import validator
 from urllib.parse import urlparse
+
 import httpx
+import validators
+
+from .exceptions import SecurityError
 
 logger = logging.getLogger(__name__)
 
@@ -53,24 +55,18 @@ KNOWN_AT_PROTOCOL_DOMAINS: Set[str] = {
 }
 
 
-@validator
 def _is_internal_hostname(hostname: str) -> bool:
-    """Validate against internal hostnames."""
-    if (
+    """Return True if the hostname refers to an internal/reserved name."""
+    return (
         hostname == "localhost"
         or hostname.endswith(".local")
         or hostname.endswith(".internal")
         or hostname.endswith(".arpa")
-    ):
-        error_msg = f"SSRF protection: Rejected internal hostname: {url}"
-        logger.warning(error_msg)
-        return False
-    return True
+    )
 
 
-@validator
-def _check_domain_whitelist(hostname: str) -> bool:
-    """Check if hostname is in the AT Protocol domain whitelist."""
+def _is_known_domain(hostname: str) -> bool:
+    """Return True if hostname is (a subdomain of) a known AT Protocol domain."""
     domain_parts = hostname.split(".")
     for i in range(len(domain_parts) - 1):
         potential_domain = ".".join(domain_parts[i:])
@@ -79,60 +75,56 @@ def _check_domain_whitelist(hostname: str) -> bool:
     return False
 
 
-@validator
-def _check_url_creds(url_parts) -> bool:
-    if url_parts.username or url_parts.password:
-        return False
-    return True
-
-
-# Used in the validator ti check the
 def validate_scheme(scheme: str) -> bool:
-    if scheme == "https":
-        return True
-    return False
+    """Only https is an acceptable URL scheme."""
+    return scheme == "https"
 
 
-def valid_url(url: str):
+def valid_url(url: str) -> None:
     """
-    Validate if a URL is safe to make a request to.
+    Validate that a URL is safe to make a request to.
 
-    Implements SSRF protections by:
-    - Ensuring HTTPS protocol
-    - Checking for private IP ranges or localhost
-    - Validating against known AT Protocol domains
+    Implements SSRF protections by ensuring the URL:
+    - Is well-formed, uses HTTPS, and has no port or IP-literal host
+    - Does not point at an internal/reserved hostname
+    - Does not embed credentials
+
+    Hosts outside KNOWN_AT_PROTOCOL_DOMAINS are allowed (AT Protocol is
+    federated, so handles and PDS servers live on arbitrary domains) but
+    are logged at WARNING level.
 
     Args:
         url: The URL to validate
 
-    Returns:
-        True if the URL is considered safe
-
     Raises:
-        SecurityError: If the URL fails security checks
+        SecurityError: If the URL fails any security check
     """
+    if not validators.url(
+        url,
+        skip_ipv6_addr=True,
+        skip_ipv4_addr=True,
+        may_have_port=False,
+        validate_scheme=validate_scheme,
+    ):
+        error_msg = (
+            "SSRF protection: rejected URL (must be well-formed https "
+            f"with no port or IP-literal host): {url}"
+        )
+        logger.warning(error_msg)
+        raise SecurityError(error_msg)
 
     url_parts = urlparse(url)
+    hostname = url_parts.hostname
 
-    try:
-        validators.url(
-            value=url,
-            skip_ipv6_addr=True,
-            skip_ipv4_addr=True,
-            may_have_port=False,
-            validate_scheme=validate_scheme,
-        )
+    if not hostname or _is_internal_hostname(hostname):
+        error_msg = f"SSRF protection: rejected internal hostname: {url}"
+        logger.warning(error_msg)
+        raise SecurityError(error_msg)
 
-        # Validate against internal hostnames
-        _is_internal_hostname(url_parts.hostname)
+    if url_parts.username or url_parts.password:
+        error_msg = f"SSRF protection: rejected URL with embedded credentials: {url}"
+        logger.warning(error_msg)
+        raise SecurityError(error_msg)
 
-        # Check domain whitelist
-        _check_domain_whitelist(url_parts.hostname)
-
-        # Check for username and password
-        _check_url_creds(url_parts)
-    except validators.ValidationError as e:
-        logger.error(f"URL validation error {e}")
-        raise validators.ValidationError from e
-    return
-
+    if not _is_known_domain(hostname):
+        logger.warning("URL host is not a known AT Protocol domain: %s", hostname)

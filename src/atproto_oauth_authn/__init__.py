@@ -26,6 +26,10 @@ from .oauth import (
     generate_oauth_state,
     generate_code_challenge,
     send_par_request,
+    get_pds_metadata,
+    extract_auth_server,
+    get_pds_auth_server_metadata,
+    PARRequestContext,
 )
 from .security import valid_url
 from .exceptions import (
@@ -60,14 +64,12 @@ __all__ = [
     "extract_pds_url",
     "get_pds_metadata",
     "extract_auth_server",
-    "get_auth_server_metadata",
+    "get_pds_auth_server_metadata",
     "generate_oauth_state",
-    "generate_code_verifier",
     "generate_code_challenge",
     "send_par_request",
-    "PARRequest",
+    "PARRequestContext",
     "valid_url",
-    "build_auth_url",
     "get_authn_url",
     # Exceptions
     "AtprotoOauthError",
