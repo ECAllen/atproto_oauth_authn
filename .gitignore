@@ -13,3 +13,7 @@ wheels/
 .env
 client-metadata.json
 CLAUDE.md
+
+# OS / tooling artifacts
+.DS_Store
+.coverage
