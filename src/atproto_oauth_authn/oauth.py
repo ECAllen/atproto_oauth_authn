@@ -91,7 +91,7 @@ def build_client_config(app_url: str) -> Tuple[str, str]:
     # Special case for development/testing with localhost
     if app_url in ["localhost", "127.0.0.1"]:
         client_id = "http://localhost/oauth/client-metadata.json"
-        redirect_uri = "http://127.0.01/oauth/callback"
+        redirect_uri = "http://127.0.0.1/oauth/callback"
 
     return client_id, redirect_uri
 

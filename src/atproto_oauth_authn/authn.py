@@ -36,7 +36,7 @@ def resolve_user_did(username: str) -> str:
         username: The AT Protocol username/handle to resolve
 
     Returns:
-        The PDS URL for the user
+        A (pds_url, user_did) tuple
 
     Raises:
         Various exceptions from the atproto_oauth_authn module if any step fails

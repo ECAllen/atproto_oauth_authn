@@ -106,6 +106,15 @@ def test_build_client_config():
     assert redirect_uri == "https://myapp.example.com/oauth/callback"
 
 
+@pytest.mark.parametrize("app_url", ["localhost", "127.0.0.1"])
+def test_build_client_config_localhost_special_case(app_url):
+    """The dev/testing special case must produce a well-formed loopback
+    redirect_uri (regression test for a `127.0.01` typo, missing a digit)."""
+    client_id, redirect_uri = build_client_config(app_url)
+    assert client_id == "http://localhost/oauth/client-metadata.json"
+    assert redirect_uri == "http://127.0.0.1/oauth/callback"
+
+
 def test_par_request_context_valid():
     """Test that a fully populated context validates."""
     context = make_par_context()
