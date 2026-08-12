@@ -8,8 +8,12 @@ the *orchestration* (call order, error propagation, exact return shape) is
 what's verified, not the already-covered internals of oauth.py/identity.py/did.py.
 """
 
-# Pytest fixtures work by shadowing the fixture name in test signatures
-# pylint: disable=redefined-outer-name
+# Pytest fixtures work by shadowing the fixture name in test signatures;
+# stacked @patch decorators require positional mock params even when a test
+# body doesn't need to assert on all of them; and the return-tuple test
+# intentionally mirrors authn.py's own unpacking order (that's the point).
+# pylint: disable=redefined-outer-name,unused-argument,too-many-arguments
+# pylint: disable=too-many-positional-arguments,too-many-locals,duplicate-code
 
 from unittest.mock import patch, Mock
 
@@ -32,6 +36,7 @@ from atproto_oauth_authn.oauth import PARRequestContext
 @patch("atproto_oauth_authn.authn.retrieve_did_document", return_value={"id": "did:plc:abc"})
 @patch("atproto_oauth_authn.authn.resolve_identity", return_value="did:plc:abc")
 def test_resolve_user_did_success(mock_resolve, mock_retrieve, mock_extract):
+    """resolve_identity -> retrieve_did_document -> extract_pds_url, in order."""
     pds_url, user_did = resolve_user_did("alice.bsky.social")
 
     mock_resolve.assert_called_once_with("alice.bsky.social")
@@ -41,8 +46,12 @@ def test_resolve_user_did_success(mock_resolve, mock_retrieve, mock_extract):
     assert user_did == "did:plc:abc"
 
 
-@patch("atproto_oauth_authn.authn.resolve_identity", side_effect=IdentityResolutionError("no such handle"))
+@patch(
+    "atproto_oauth_authn.authn.resolve_identity",
+    side_effect=IdentityResolutionError("no such handle"),
+)
 def test_resolve_user_did_propagates_identity_resolution_failure(mock_resolve):
+    """A failure at the first step must propagate, not be swallowed."""
     with pytest.raises(IdentityResolutionError):
         resolve_user_did("nonexistent.bsky.social")
 
@@ -50,6 +59,7 @@ def test_resolve_user_did_propagates_identity_resolution_failure(mock_resolve):
 @patch("atproto_oauth_authn.authn.retrieve_did_document", side_effect=RuntimeError("network down"))
 @patch("atproto_oauth_authn.authn.resolve_identity", return_value="did:plc:abc")
 def test_resolve_user_did_propagates_did_document_failure(mock_resolve, mock_retrieve):
+    """A failure at the DID-document step must propagate."""
     with pytest.raises(RuntimeError):
         resolve_user_did("alice.bsky.social")
 
@@ -57,7 +67,10 @@ def test_resolve_user_did_propagates_did_document_failure(mock_resolve, mock_ret
 @patch("atproto_oauth_authn.authn.extract_pds_url", side_effect=ValueError("no PDS service entry"))
 @patch("atproto_oauth_authn.authn.retrieve_did_document", return_value={"id": "did:plc:abc"})
 @patch("atproto_oauth_authn.authn.resolve_identity", return_value="did:plc:abc")
-def test_resolve_user_did_propagates_pds_extraction_failure(mock_resolve, mock_retrieve, mock_extract):
+def test_resolve_user_did_propagates_pds_extraction_failure(
+    mock_resolve, mock_retrieve, mock_extract
+):
+    """A failure at the PDS-URL-extraction step must propagate."""
     with pytest.raises(ValueError):
         resolve_user_did("alice.bsky.social")
 
@@ -70,6 +83,7 @@ def test_resolve_user_did_propagates_pds_extraction_failure(mock_resolve, mock_r
 @patch("atproto_oauth_authn.authn.get_pds_metadata", return_value={"auth": {}})
 @patch("atproto_oauth_authn.authn.valid_url")
 def test_get_pds_auth_servers_success(mock_valid_url, mock_get_meta, mock_extract):
+    """valid_url -> get_pds_metadata -> extract_auth_server, in order."""
     servers = get_pds_auth_servers("https://pds.example.com")
 
     mock_valid_url.assert_called_once_with("https://pds.example.com")
@@ -80,6 +94,7 @@ def test_get_pds_auth_servers_success(mock_valid_url, mock_get_meta, mock_extrac
 
 @patch("atproto_oauth_authn.authn.valid_url", side_effect=SecurityError("rejected"))
 def test_get_pds_auth_servers_rejects_unsafe_pds_url(mock_valid_url):
+    """The SSRF guard runs before anything else and its rejection propagates."""
     with pytest.raises(SecurityError):
         get_pds_auth_servers("http://169.254.169.254/")
 
@@ -87,6 +102,7 @@ def test_get_pds_auth_servers_rejects_unsafe_pds_url(mock_valid_url):
 @patch("atproto_oauth_authn.authn.get_pds_metadata", side_effect=RuntimeError("boom"))
 @patch("atproto_oauth_authn.authn.valid_url")
 def test_get_pds_auth_servers_propagates_metadata_failure(mock_valid_url, mock_get_meta):
+    """A failure fetching PDS metadata must propagate."""
     with pytest.raises(RuntimeError):
         get_pds_auth_servers("https://pds.example.com")
 
@@ -94,7 +110,10 @@ def test_get_pds_auth_servers_propagates_metadata_failure(mock_valid_url, mock_g
 @patch("atproto_oauth_authn.authn.extract_auth_server", side_effect=KeyError("auth"))
 @patch("atproto_oauth_authn.authn.get_pds_metadata", return_value={})
 @patch("atproto_oauth_authn.authn.valid_url")
-def test_get_pds_auth_servers_propagates_extraction_failure(mock_valid_url, mock_get_meta, mock_extract):
+def test_get_pds_auth_servers_propagates_extraction_failure(
+    mock_valid_url, mock_get_meta, mock_extract
+):
+    """A failure extracting the auth server from metadata must propagate."""
     with pytest.raises(KeyError):
         get_pds_auth_servers("https://pds.example.com")
 
@@ -112,6 +131,7 @@ _CLIENT_CONFIG = (
     "https://cards.example.com/oauth/client-metadata.json",
     "https://cards.example.com/oauth/callback",
 )
+_RESOLVED_USER = ("https://pds.example.com", "did:plc:abc")
 
 
 def _par_response():
@@ -126,7 +146,7 @@ def _par_response():
 @patch("atproto_oauth_authn.authn.build_client_config", return_value=_CLIENT_CONFIG)
 @patch("atproto_oauth_authn.authn.get_pds_auth_server_metadata", return_value=_AUTH_SERVER_METADATA)
 @patch("atproto_oauth_authn.authn.get_pds_auth_servers", return_value=["https://auth.example.com"])
-@patch("atproto_oauth_authn.authn.resolve_user_did", return_value=("https://pds.example.com", "did:plc:abc"))
+@patch("atproto_oauth_authn.authn.resolve_user_did", return_value=_RESOLVED_USER)
 def test_get_authn_url_returns_expected_tuple_shape(
     mock_resolve_user_did,
     mock_get_pds_auth_servers,
@@ -175,7 +195,7 @@ def test_get_authn_url_returns_expected_tuple_shape(
 @patch("atproto_oauth_authn.authn.build_client_config", return_value=_CLIENT_CONFIG)
 @patch("atproto_oauth_authn.authn.get_pds_auth_server_metadata", return_value=_AUTH_SERVER_METADATA)
 @patch("atproto_oauth_authn.authn.get_pds_auth_servers", return_value=["https://auth.example.com"])
-@patch("atproto_oauth_authn.authn.resolve_user_did", return_value=("https://pds.example.com", "did:plc:abc"))
+@patch("atproto_oauth_authn.authn.resolve_user_did", return_value=_RESOLVED_USER)
 def test_get_authn_url_builds_par_context_from_username_and_scope(
     mock_resolve_user_did,
     mock_get_pds_auth_servers,
@@ -185,6 +205,8 @@ def test_get_authn_url_builds_par_context_from_username_and_scope(
     mock_dpop_jwt,
     mock_send_par,
 ):
+    """The PAR request context (and the DPoP proof bound to it) must be
+    built from get_authn_url's own arguments, not leftover/default values."""
     get_authn_url(
         "alice.bsky.social",
         "cards.example.com",
@@ -213,8 +235,14 @@ def test_get_authn_url_builds_par_context_from_username_and_scope(
 
 
 @patch("atproto_oauth_authn.authn.get_pds_auth_servers")
-@patch("atproto_oauth_authn.authn.resolve_user_did", side_effect=IdentityResolutionError("no such handle"))
-def test_get_authn_url_propagates_unresolvable_handle(mock_resolve_user_did, mock_get_pds_auth_servers):
+@patch(
+    "atproto_oauth_authn.authn.resolve_user_did",
+    side_effect=IdentityResolutionError("no such handle"),
+)
+def test_get_authn_url_propagates_unresolvable_handle(
+    mock_resolve_user_did, mock_get_pds_auth_servers
+):
+    """resolve_user_did failing must short-circuit the rest of the chain."""
     with pytest.raises(IdentityResolutionError):
         get_authn_url("nonexistent.bsky.social", "cards.example.com")
     mock_get_pds_auth_servers.assert_not_called()
@@ -223,20 +251,10 @@ def test_get_authn_url_propagates_unresolvable_handle(mock_resolve_user_did, moc
 @patch("atproto_oauth_authn.authn.send_par_request", side_effect=RuntimeError("PAR request failed"))
 @patch("atproto_oauth_authn.authn.authserver_dpop_jwt", return_value="dpop-proof")
 @patch("atproto_oauth_authn.authn.client_assertion_jwt", return_value="assertion-jwt")
-@patch(
-    "atproto_oauth_authn.authn.build_client_config",
-    return_value=("https://cards.example.com/oauth/client-metadata.json", "https://cards.example.com/oauth/callback"),
-)
-@patch(
-    "atproto_oauth_authn.authn.get_pds_auth_server_metadata",
-    return_value={
-        "issuer": "https://auth.example.com",
-        "pushed_authorization_request_endpoint": "https://auth.example.com/par",
-        "revocation_endpoint": "https://auth.example.com/revoke",
-    },
-)
+@patch("atproto_oauth_authn.authn.build_client_config", return_value=_CLIENT_CONFIG)
+@patch("atproto_oauth_authn.authn.get_pds_auth_server_metadata", return_value=_AUTH_SERVER_METADATA)
 @patch("atproto_oauth_authn.authn.get_pds_auth_servers", return_value=["https://auth.example.com"])
-@patch("atproto_oauth_authn.authn.resolve_user_did", return_value=("https://pds.example.com", "did:plc:abc"))
+@patch("atproto_oauth_authn.authn.resolve_user_did", return_value=_RESOLVED_USER)
 def test_get_authn_url_propagates_par_request_failure(
     mock_resolve_user_did,
     mock_get_pds_auth_servers,
@@ -246,5 +264,6 @@ def test_get_authn_url_propagates_par_request_failure(
     mock_dpop_jwt,
     mock_send_par,
 ):
+    """A failure sending the PAR request itself must propagate."""
     with pytest.raises(RuntimeError):
         get_authn_url("alice.bsky.social", "cards.example.com")

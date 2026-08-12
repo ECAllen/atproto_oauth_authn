@@ -3,6 +3,8 @@
 import logging
 import re
 
+import dns.exception
+import dns.resolver
 import httpx
 
 from .security import valid_url
@@ -17,10 +19,74 @@ HANDLE_REGEX = (
 )
 DID_RE = r"^did:[a-z]+:[a-zA-Z0-9.%-]+$"
 
+DNS_TXT_PREFIX = "did="
+
+
+def _resolve_via_dns_txt(handle: str) -> str | None:
+    """Resolve a handle via the `_atproto.<handle>` DNS TXT method.
+
+    Returns the DID, or None if the record is absent or unparsable (not an
+    error condition — the caller falls back to the HTTPS well-known method).
+    """
+    qname = f"_atproto.{handle}"
+    try:
+        answers = dns.resolver.resolve(qname, "TXT", lifetime=5.0)
+    except dns.exception.DNSException as e:
+        logger.debug("DNS TXT resolution for %s found nothing: %s", qname, e)
+        return None
+
+    for rdata in answers:
+        txt_value = b"".join(rdata.strings).decode("utf-8", errors="replace")
+        if txt_value.startswith(DNS_TXT_PREFIX):
+            did = txt_value[len(DNS_TXT_PREFIX):]
+            if re.match(DID_RE, did):
+                return did
+            logger.debug("DNS TXT record for %s had a malformed DID: %r", qname, did)
+
+    return None
+
+
+def _resolve_via_well_known(handle: str) -> str | None:
+    """Resolve a handle via the `https://<handle>/.well-known/atproto-did` method.
+
+    Returns the DID, or None if the endpoint doesn't resolve one (not an
+    error condition — the caller treats this as resolution failure only
+    after both methods have been tried).
+
+    Raises:
+        SecurityError: If the constructed URL fails SSRF validation.
+    """
+    url = f"https://{handle}/.well-known/atproto-did"
+
+    try:
+        valid_url(url)
+    except SecurityError:
+        logger.error("Security check failed for URL: %s", url)
+        raise
+
+    try:
+        response = httpx.get(url, timeout=5.0)
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        logger.debug("Well-known resolution for %s failed: %s", handle, e)
+        return None
+
+    did = response.text.strip()
+    if re.match(DID_RE, did):
+        return did
+
+    logger.debug("Well-known response for %s was not a valid DID: %r", handle, did)
+    return None
+
 
 def resolve_identity(username: str) -> str:
     """
     Resolve a username (handle or DID) to a DID.
+
+    Handles are resolved per the AT Protocol handle resolution spec
+    (https://atproto.com/specs/handle): a DNS TXT record at
+    `_atproto.<handle>` is tried first, falling back to the HTTPS
+    `https://<handle>/.well-known/atproto-did` method.
 
     Args:
         username: A string that could be a handle or DID
@@ -39,44 +105,17 @@ def resolve_identity(username: str) -> str:
         # Handle the case where username is a handle
         logger.debug("Username is a handle: %s", username)
 
-        # Extract domain and TLD from the handle
-        parts = username.split(".")
-        if len(parts) >= 2:
-            domain_tld = ".".join(parts[1:])
-            logger.info("Extracted domain and TLD: %s", domain_tld)
-        else:
-            error_msg = f"Could not extract domain from handle: {username}"
-            logger.warning(error_msg)
-            raise IdentityResolutionError(error_msg)
-
-        url = f"https://{domain_tld}/xrpc/com.atproto.identity.resolveHandle?handle={username}"
-
-        # Check URL for SSRF vulnerabilities
-        try:
-            valid_url(url)
-        except SecurityError:
-            logger.error("Security check failed for URL: %s", url)
-            raise
-
-        # Make HTTP request to resolve handle to DID
-        try:
-            response = httpx.get(url)
-            response.raise_for_status()  # Raise exception for 4XX/5XX responses
-        except httpx.HTTPError as e:
-            error_msg = f"Failed to resolve handle {username}: {e}"
-            logger.warning(error_msg)
-            raise IdentityResolutionError(error_msg) from e
-
-        # Parse the JSON response
-        data = response.json()
-
-        # Extract the DID from the response
-        did = data.get("did")
+        did = _resolve_via_dns_txt(username)
         if did:
-            logger.debug("Resolved handle %s to DID: %s", username, did)
+            logger.debug("Resolved handle %s to DID via DNS TXT: %s", username, did)
             return did
 
-        error_msg = f"Failed to resolve handle: {username}. No DID found in response"
+        did = _resolve_via_well_known(username)
+        if did:
+            logger.debug("Resolved handle %s to DID via well-known: %s", username, did)
+            return did
+
+        error_msg = f"Failed to resolve handle: {username}. No DID found via DNS TXT or well-known"
         logger.info(error_msg)
         raise IdentityResolutionError(error_msg)
 

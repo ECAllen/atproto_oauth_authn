@@ -21,14 +21,15 @@
   instead of the current silent-log-and-continue. Needs a decision (and a
   matching update in Cards' `modules/auth.py`) before changing, not a
   same-sitting fix.
-- Handle resolution in `identity.py` queries the handle's own domain for the
-  `com.atproto.identity.resolveHandle` XRPC call; that assumption breaks for
-  handles whose domain doesn't host a PDS/appview (works for *.bsky.social).
-  **Not fixed yet** — the spec-correct fix (DNS TXT `_atproto.<handle>`
-  lookup, falling back to `https://<handle>/.well-known/atproto-did`) is a
-  real behavior change to how every login resolves a handle, including
-  `*.statmeet.com` handles in production. Wants its own verification pass
-  against real handles before landing, not a drive-by fix.
+- [x] Handle resolution in `identity.py` used to query the handle's own
+  domain for the `com.atproto.identity.resolveHandle` XRPC call, which only
+  worked by coincidence for `*.bsky.social`-style handles. Replaced with the
+  actual AT Protocol algorithm (https://atproto.com/specs/handle): DNS TXT
+  record at `_atproto.<handle>` first, falling back to
+  `https://<handle>/.well-known/atproto-did`. Added `dnspython` as a
+  dependency. Live-verified against real handles on both paths — DNS TXT
+  (`jay.bsky.team`, `bsky.app`) and well-known fallback (`statmeet.com`,
+  production) — plus full `resolve_user_did` end-to-end (2026-08-11).
 
 ### Design decisions deferred
 - `valid_url` rejects URLs with an explicit port (`may_have_port=False`) —
@@ -44,7 +45,7 @@
   pyproject.toml; remove `requests` (imported nowhere, httpx is used)
 - Remove duplicated NullHandler/`__version__` block in `__init__.py`
   (lines repeated twice)
-- Add `.DS_Store` to .gitignore
+- [x] Add `.DS_Store` to .gitignore (2026-08-11, also added `.coverage`)
 - GitHub Actions workflows (Pylint, Ruff, Tests) are manually disabled on
   GitHub — re-enable via Actions tab when wanted; local runs are green
   (pylint 10/10, ruff clean, 72 tests passing)
