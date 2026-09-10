@@ -9,6 +9,7 @@ from unittest.mock import patch, Mock
 
 import httpx
 import pytest
+from joserfc import jwt
 from joserfc.jwk import ECKey
 
 from atproto_oauth_authn.oauth import (
@@ -19,6 +20,7 @@ from atproto_oauth_authn.oauth import (
     build_client_config,
     auth_server_post,
     authserver_dpop_jwt,
+    pds_dpop_jwt,
     dpop_nonce_retry,
     PARRequestContext,
 )
@@ -149,6 +151,33 @@ def test_par_request_body():
         "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
         "client_assertion": "assertion123",
     }
+
+
+def test_par_request_body_includes_dpop_jkt():
+    """The PAR body must bind the authorization request to the DPoP key by
+    carrying `dpop_jkt` (the RFC 7638 JWK thumbprint), per the atproto OAuth
+    spec."""
+    key = ECKey.generate_key("P-256")
+    context = make_par_context(dpop_private_jwk=key)
+
+    assert context.par_request_body()["dpop_jkt"] == key.thumbprint()
+
+
+def test_par_request_body_omits_dpop_jkt_without_key():
+    """No DPoP key means no `dpop_jkt` key in the body (rather than a null)."""
+    assert "dpop_jkt" not in make_par_context().par_request_body()
+
+
+def test_par_request_body_includes_login_hint():
+    """A supplied login_hint must actually be sent in the PAR body."""
+    context = make_par_context(login_hint="alice.bsky.social")
+
+    assert context.par_request_body()["login_hint"] == "alice.bsky.social"
+
+
+def test_par_request_body_omits_login_hint_when_absent():
+    """No login_hint means no `login_hint` key in the body."""
+    assert "login_hint" not in make_par_context().par_request_body()
 
 
 @patch("atproto_oauth_authn.oauth.httpx.post")
@@ -357,6 +386,44 @@ def test_authserver_dpop_jwt_produces_jwt():
     )
     assert isinstance(proof, str)
     assert proof.count(".") == 2
+
+
+def test_authserver_dpop_jwt_omits_exp_claim():
+    """DPoP proofs must not carry an `exp` claim (RFC 9449 proofs are bounded
+    by `iat` freshness + `jti` replay tracking, and atproto auth servers
+    reject proofs with an `exp`)."""
+    key = ECKey.generate_key("P-256")
+    proof = authserver_dpop_jwt(
+        method="POST",
+        url="https://auth.example.com/par",
+        dpop_private_jwk=key,
+        nonce="nonce-1",
+    )
+    claims = jwt.decode(proof, key).claims
+    assert "exp" not in claims
+    assert "iat" in claims
+    assert claims["htm"] == "POST"
+    assert claims["htu"] == "https://auth.example.com/par"
+    assert claims["nonce"] == "nonce-1"
+
+
+def test_pds_dpop_jwt_omits_exp_claim():
+    """The PDS-bound DPoP proof must also drop `exp` while keeping the
+    access-token binding (`ath`) and request binding (`htm`/`htu`)."""
+    key = ECKey.generate_key("P-256")
+    proof = pds_dpop_jwt(
+        method="GET",
+        url="https://pds.example.com/xrpc/com.atproto.repo.getRecord",
+        dpop_private_jwk=key,
+        access_token="access-token-123",
+        nonce="nonce-2",
+    )
+    claims = jwt.decode(proof, key).claims
+    assert "exp" not in claims
+    assert "iat" in claims
+    assert "ath" in claims
+    assert claims["htm"] == "GET"
+    assert claims["nonce"] == "nonce-2"
 
 
 def test_authserver_dpop_jwt_rejects_private_key_leak():

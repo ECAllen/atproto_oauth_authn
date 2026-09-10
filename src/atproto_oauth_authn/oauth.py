@@ -63,7 +63,7 @@ class PARRequestContext:  # pylint: disable=too-many-instance-attributes
 
     def par_request_body(self):
         """Build the form body for the PAR request."""
-        return {
+        body = {
             "response_type": self.response_type,
             "code_challenge": self.code_challenge,
             "code_challenge_method": self.code_challenge_method,
@@ -74,6 +74,15 @@ class PARRequestContext:  # pylint: disable=too-many-instance-attributes
             "client_assertion_type": self.client_assertion_type,
             "client_assertion": self.client_assertion,
         }
+
+        # Bind the authorization request to the DPoP key (atproto OAuth spec).
+        if self.dpop_private_jwk is not None:
+            body["dpop_jkt"] = self.dpop_private_jwk.thumbprint()
+
+        if self.login_hint:
+            body["login_hint"] = self.login_hint
+
+        return body
 
 
 def build_client_config(app_url: str) -> Tuple[str, str]:
@@ -505,12 +514,14 @@ def authserver_dpop_jwt(
 
     header = {"typ": "dpop+jwt", "alg": "ES256", "jwk": dpop_pub_jwk}
 
+    # No `exp` claim: RFC 9449 DPoP proofs are validated by `iat` freshness
+    # plus server-side `jti` replay tracking (§4.3), not `exp`. The atproto
+    # reference clients omit it.
     body = {
         "jti": generate_token(),
         "htm": method,
         "htu": url,
         "iat": int(time.time()),
-        "exp": int(time.time()) + 30,
     }
 
     if nonce:
@@ -524,8 +535,6 @@ def authserver_dpop_jwt(
 
     if isinstance(dpop_proof, bytes):
         dpop_proof = dpop_proof.decode("utf-8")
-
-    # decoded = jwt.decode(dpop_proof, dpop_private_jwk)
 
     return dpop_proof
 
@@ -542,9 +551,9 @@ def pds_dpop_jwt(
 
     header = {"typ": "dpop+jwt", "alg": "ES256", "jwk": dpop_pub_jwk}
 
+    # No `exp` claim: see authserver_dpop_jwt.
     body = {
         "iat": int(time.time()),
-        "exp": int(time.time()) + 10,
         "jti": generate_token(),
         "htm": method,
         "htu": url,
