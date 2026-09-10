@@ -31,6 +31,21 @@
   (`jay.bsky.team`, `bsky.app`) and well-known fallback (`statmeet.com`,
   production) — plus full `resolve_user_did` end-to-end (2026-08-11).
 
+### DPoP / OAuth spec compliance (2026-09-10)
+- [x] DPoP proofs (`authserver_dpop_jwt`, `pds_dpop_jwt`) carried an `exp`
+  claim (30s / 10s). RFC 9449 proofs are validated by `iat` freshness plus
+  server-side `jti` replay tracking, not `exp`, and the atproto reference
+  clients omit it; the 10s PDS window was also fragile under clock skew.
+  Removed `exp` from both builders.
+- [x] The Pushed Authorization Request never sent `dpop_jkt`, so the auth
+  server could not bind the authorization code to the client's DPoP key
+  (proposal 0004 / atproto OAuth). `PARRequestContext` already received
+  `dpop_private_jwk` but only used it for the proof; `par_request_body()`
+  now also emits `dpop_jkt` = the RFC 7638 JWK thumbprint.
+- [x] `login_hint` was stored on `PARRequestContext` (set from the username
+  in `authn.get_authn_url`) but never included in the PAR body;
+  `par_request_body()` now emits it when present.
+
 ### Design decisions deferred
 - `valid_url` rejects URLs with an explicit port (`may_have_port=False`) —
   will break self-hosted PDS instances on nonstandard ports; relax if needed
